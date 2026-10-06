@@ -3,6 +3,7 @@ import { useStore } from '../store';
 import { useKitchenStore } from '../store/kitchenStore';
 import { generateKitchenPartsList, generateKitchenHardwareList, HARDWARE_SPECS, isHplFinish, calculateKitchenBoardNesting } from './kitchenManufacturing';
 import { generateCountertopPieces, detectContinuousCabinetRuns } from './countertopNesting';
+import { getFriendlyColorName } from './colorNames';
 
 export const exportKitchenToExcel = () => {
   try {
@@ -19,37 +20,7 @@ export const exportKitchenToExcel = () => {
     const parts = generateKitchenPartsList(cabinets);
     const hardware = generateKitchenHardwareList(cabinets);
 
-    const DEFAULT_NAMES: Record<string, string> = {
-      '#FFFFFF': 'Blanco',
-      '#171717': 'Negro',
-      '#F8F9FA': 'Bianco Polo',
-      '#202020': 'Nero',
-      '#D4A373': 'Roble Natural',
-      '#A3B18A': 'Verde Salvia',
-      '#588157': 'Verde Bosque',
-      '#3A5A40': 'Verde Olivo',
-      '#E0E1DD': 'Gris Humo',
-      '#778DA9': 'Azul Nórdico',
-      '#415A77': 'Azul Petróleo',
-      '#1B263B': 'Azul Noche',
-      '#2B2D42': 'Grafito Mate',
-      '#8D99AE': 'Gris Plata',
-      '#EDF2F4': 'Blanco Nieve',
-      '#DDA15E': 'Madera Teca',
-      '#BC6C25': 'Nogal Ceniza',
-    };
-
-    const getTextureName = (urlOrColor: string) => {
-      if (!urlOrColor) return 'Color Estándar';
-      if (urlOrColor.startsWith('data:') || urlOrColor.startsWith('http')) {
-        const tex = state.customTextures?.find((t: any) => t.url === urlOrColor);
-        return tex ? tex.name.replace(/\.[^/.]+$/, '') : 'Textura Personalizada';
-      }
-      if (DEFAULT_NAMES[urlOrColor.toUpperCase()]) {
-        return DEFAULT_NAMES[urlOrColor.toUpperCase()];
-      }
-      return `Color ${urlOrColor}`;
-    };
+    const getTextureName = (urlOrColor: string) => getFriendlyColorName(urlOrColor, state.customTextures);
 
     const dataPlacas: any[] = [];
     const dataHPL: any[] = [];
@@ -62,39 +33,69 @@ export const exportKitchenToExcel = () => {
                       !p.name.toLowerCase().includes('amarre') &&
                       !p.name.toLowerCase().includes('caja');
       const decorName = getTextureName(p.material);
-      const isHPL = isFront && (p.isHpl !== undefined ? p.isHpl : isHplFinish(p.material, undefined, cabinets.find(c => c.id === p.moduleId)));
+      const isHPL = p.isHpl !== undefined ? p.isHpl : isHplFinish(p.material);
       const qtyBatch = p.qty * multiplier;
 
+      const cab = cabinets.find(c => c.id === p.moduleId);
+      const isBalancer = cab?.hplBalancer !== undefined ? cab.hplBalancer : state.hplBalancer;
+      const substrateThick = cab?.hplSubstrateThickness || state.hplSubstrateThickness || 15;
+
       if (isHPL) {
-        dataHPL.push({
-          Gabinete: p.notes?.includes('Cab') ? p.notes : `Gabinete ${(p.moduleIndex || 0) + 1}`,
-          Pieza: `${p.name} (Cara HPL +1cm refilado)`,
-          Material: 'Laminado Alta Presión (Abet Laminati 0.9mm)',
-          Decorativo: decorName,
-          'Largo Corte HPL (mm)': (p.length + hplOversize).toFixed(1),
-          'Ancho Corte HPL (mm)': (p.width + hplOversize).toFixed(1),
-          'Espesor (mm)': '0.9',
-          Cantidad: qtyBatch,
-          Notas: `Sobremedida +1cm para prensado sobre MDF 18mm y posterior refilado${multiplier > 1 ? ` (Lote: ${multiplier} un)` : ''}`
-        });
+        if (isBalancer) {
+          // 1 lámina diseño + 1 lámina balancer blanco
+          dataHPL.push({
+            Gabinete: p.notes?.includes('Cab') ? p.notes : `Gabinete ${(p.moduleIndex || 0) + 1}`,
+            Pieza: `${p.name} (Cara Vista HPL +1cm refilado)`,
+            Material: 'Laminado Alta Presión (Abet Laminati 0.9mm)',
+            Decorativo: decorName,
+            'Largo Corte HPL (mm)': (p.length + hplOversize).toFixed(1),
+            'Ancho Corte HPL (mm)': (p.width + hplOversize).toFixed(1),
+            'Espesor (mm)': '0.9',
+            Cantidad: qtyBatch,
+            Notas: `Lámina cara vista +1cm para prensado y posterior refilado${multiplier > 1 ? ` (Lote: ${multiplier} un)` : ''}`
+          });
+          dataHPL.push({
+            Gabinete: p.notes?.includes('Cab') ? p.notes : `Gabinete ${(p.moduleIndex || 0) + 1}`,
+            Pieza: `${p.name} (Trascara Balancer Blanco +1cm)`,
+            Material: 'Balancer Blanco Mecánico (0.9mm)',
+            Decorativo: 'Balancer Blanco 0.9mm',
+            'Largo Corte HPL (mm)': (p.length + hplOversize).toFixed(1),
+            'Ancho Corte HPL (mm)': (p.width + hplOversize).toFixed(1),
+            'Espesor (mm)': '0.9',
+            Cantidad: qtyBatch,
+            Notas: `Lámina de compensación anti-alabeo +1cm para prensado${multiplier > 1 ? ` (Lote: ${multiplier} un)` : ''}`
+          });
+        } else {
+          dataHPL.push({
+            Gabinete: p.notes?.includes('Cab') ? p.notes : `Gabinete ${(p.moduleIndex || 0) + 1}`,
+            Pieza: `${p.name} (HPL 2 Caras +1cm refilado)`,
+            Material: 'Laminado Alta Presión (Abet Laminati 0.9mm)',
+            Decorativo: decorName,
+            'Largo Corte HPL (mm)': (p.length + hplOversize).toFixed(1),
+            'Ancho Corte HPL (mm)': (p.width + hplOversize).toFixed(1),
+            'Espesor (mm)': '0.9',
+            Cantidad: qtyBatch * 2,
+            Notas: `2 láminas HPL (ambas caras mismo diseño) +1cm para prensado y posterior refilado${multiplier > 1 ? ` (Lote: ${multiplier} un)` : ''}`
+          });
+        }
       }
 
       dataPlacas.push({
         Gabinete: p.notes?.includes('Cab') ? p.notes : `Gabinete ${(p.moduleIndex || 0) + 1}`,
-        Pieza: isHPL ? `${p.name} (Sustrato Base MDF 18mm)` : p.name,
-        Material: isHPL ? 'MDF Crudo Desnudo (Sustrato Base)' : (p.thickness === 3 ? 'Durolac / MDF 3mm' : 'Melamina Estándar'),
-        Decorativo: isHPL ? `${decorName} (HPL)` : decorName,
+        Pieza: isHPL ? `${p.name} (Sustrato Base MDF ${substrateThick}mm)` : p.name,
+        Material: isHPL ? `MDF Crudo Desnudo ${substrateThick}mm (Sustrato Base - Formato 2440 × 1520 mm)` : (p.thickness <= 4 ? 'Durolac / MDF 3mm' : 'Melamina Estándar'),
+        Decorativo: isHPL ? (isBalancer ? `${decorName} + Balancer Blanco` : `${decorName} (HPL 2 Caras)`) : decorName,
         'Cortes Totales': qtyBatch,
         Cantidad: qtyBatch,
         'Largo (mm)': p.length.toFixed(1),
         'Ancho (mm)': p.width.toFixed(1),
         'Veta (Orientación)': isHPL ? 'Sin Veta (Libre)' : (p.grainDirection === 'horizontal' ? 'Horizontal' : 'Vertical'),
-        'Espesor (mm)': isHPL ? '18.0' : p.thickness.toFixed(1),
+        'Espesor (mm)': isHPL ? substrateThick.toFixed(1) : p.thickness.toFixed(1),
         'Tapacanto Largo 1': p.edgeL1 ? 'Sí' : 'No',
         'Tapacanto Largo 2': p.edgeL2 ? 'Sí' : 'No',
         'Tapacanto Ancho 1': p.edgeW1 ? 'Sí' : 'No',
         'Tapacanto Ancho 2': p.edgeW2 ? 'Sí' : 'No',
-        Notas: isHPL ? `Sustrato base MDF 18mm para prensado de ${decorName}` : (p.notes || (multiplier > 1 ? `Lote: ${multiplier} un (${p.qty}/mueble)` : ''))
+        Notas: isHPL ? `Sustrato base MDF ${substrateThick}mm (Formato 2440 × 1520 mm) para prensado de ${decorName}` : (p.notes || (multiplier > 1 ? `Lote: ${multiplier} un (${p.qty}/mueble)` : ''))
       });
 
       // Tapacantos por pieza técnica
@@ -160,17 +161,19 @@ export const exportKitchenToExcel = () => {
             });
           }
 
+          const islandSubstrateThick = useStore.getState().hplSubstrateThickness || 15;
+
           dataPlacas.push({
             Gabinete: `Isla ${rIdx + 1}`,
             Pieza: `Panel Trasero Trasdosado Isla (${segmentCount > 1 ? `Tramo ${s + 1}/${segmentCount}` : 'Monolítico'})`,
-            Material: isHPL ? 'MDF Desnudo (Sustrato HPL)' : 'Melamina Estándar',
+            Material: isHPL ? `MDF Desnudo ${islandSubstrateThick}mm (Sustrato HPL - Formato 2440 × 1520 mm)` : 'Melamina Estándar',
             Decorativo: decorName,
             'Cortes Totales': 1,
             Cantidad: 1,
             'Largo (mm)': segLenMm.toFixed(1),
             'Ancho (mm)': hMm.toFixed(1),
             'Veta (Orientación)': 'Horizontal',
-            'Espesor (mm)': '18.0',
+            'Espesor (mm)': isHPL ? islandSubstrateThick.toFixed(1) : '18.0',
             'Tapacanto Largo 1': 'Sí',
             'Tapacanto Largo 2': 'Sí',
             'Tapacanto Ancho 1': 'Sí',
@@ -258,23 +261,26 @@ export const exportKitchenToExcel = () => {
 
         const matchingPatterns = groupedBoards.filter(b => {
           const matLower = (b.materialName || '').toLowerCase();
-          if (itemLower.includes('puertas') || itemLower.includes('frentes')) {
-            if (itemLower.includes('mdf crudo') || itemLower.includes('sustrato')) {
-              return matLower.includes('sustrato') || matLower.includes('mdf crudo');
-            }
-            if (itemLower.includes('hpl') || itemLower.includes('laminado')) {
-              return b.materialCategory === 'hpl' && (!decorFilter || matLower.includes(decorFilter) || decorFilter.includes(matLower));
-            }
-            if (b.materialCategory === 'doors') {
-              return !decorFilter || matLower.includes(decorFilter) || decorFilter.includes(matLower);
-            }
-            return false;
+          if (itemLower.includes('mdf crudo') || itemLower.includes('sustrato')) {
+            return matLower.includes('sustrato') || matLower.includes('mdf crudo');
+          }
+          if (itemLower.includes('hpl') || itemLower.includes('laminado')) {
+            return b.materialCategory === 'hpl' && (!decorFilter || matLower.includes(decorFilter) || decorFilter.includes(matLower));
           }
           if (itemLower.includes('traseras') || itemLower.includes('fondos') || itemLower.includes('durolac')) {
             return b.materialCategory === 'backs';
           }
-          if (itemLower.includes('estructura') || itemLower.includes('cajones')) {
-            if (b.materialCategory === 'structure') {
+          if (itemLower.includes('puertas') && itemLower.includes('estructura')) {
+            return (b.materialCategory === 'structure' || b.materialCategory === 'doors') && (!decorFilter || matLower.includes(decorFilter) || decorFilter.includes(matLower));
+          }
+          if (itemLower.includes('puertas') || itemLower.includes('frentes')) {
+            if (b.materialCategory === 'doors' || (b.materialCategory === 'structure' && (b.label || '').includes('PUERTAS'))) {
+              return !decorFilter || matLower.includes(decorFilter) || decorFilter.includes(matLower);
+            }
+            return false;
+          }
+          if (itemLower.includes('estructura') || itemLower.includes('cajones') || itemLower.includes('melamina')) {
+            if (b.materialCategory === 'structure' || b.materialCategory === 'doors') {
               return !decorFilter || matLower.includes(decorFilter) || decorFilter.includes(matLower);
             }
             return false;

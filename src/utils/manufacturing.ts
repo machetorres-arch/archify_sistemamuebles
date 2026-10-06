@@ -302,16 +302,16 @@ export function generatePartsList(data: ManufacturingData): Part[] {
       });
 
       parts.push({
-        name: `Fondo Cajón ${modName}`,
+        name: `Fondo Cajón (Melamina ${thickness * 10}mm) ${modName}`,
         moduleId: mod.id,
         moduleIndex: index,
         qty: mod.drawers,
         length: drawerBoxLength,
         width: drawerBoxOuterWidth,
-        thickness: 3,
-        material: 'Melamina Fondo',
-        edgeL1: false, edgeL2: false, edgeW1: false, edgeW2: false,
-        notes: 'Fondo clavado/ranurado'
+        thickness: thickness * 10,
+        material: mod.overrides?.drawerInnerColor || (data as any).drawerInnerColor || (data as any).structureColor || 'Melamina Cuerpo',
+        edgeL1: true, edgeL2: false, edgeW1: false, edgeW2: false,
+        notes: `Fondo estructurado en melamina ${thickness * 10}mm a tono de caja`
       });
     }
 

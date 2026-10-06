@@ -209,6 +209,8 @@ export function KitchenBlueprint() {
     w: number;
     h: number;
     parts: NestingPart[];
+    hasDoors?: boolean;
+    hasStruct?: boolean;
   }
 
   const boardGroups: Record<string, BoardGroupDef> = {};
@@ -219,8 +221,8 @@ export function KitchenBlueprint() {
                     !p.name.toLowerCase().includes('contrafrente') &&
                     !p.name.toLowerCase().includes('amarre') &&
                     !p.name.toLowerCase().includes('caja');
-    const isBack = p.thickness === 3 || p.thickness === 3.5 || p.material === 'Melamina Fondo' || (p.name.includes('Fondo') && !p.name.includes('Soporte')) || (p.name.includes('Trasera') && !p.name.includes('Barra') && !p.name.includes('Caja Cajón'));
-    const isHPL = isFront && (p.isHpl !== undefined ? p.isHpl : isHplFinish(p.material, undefined, kState.cabinets.find(c => c.id === p.moduleId)));
+    const isHPL = p.isHpl !== undefined ? p.isHpl : isHplFinish(p.material, undefined, kState.cabinets.find(c => c.id === p.moduleId));
+    const isBack = !isHPL && p.thickness <= 4 && (p.thickness === 3 || p.thickness === 3.5 || p.material === 'Melamina Fondo' || (p.name.includes('Fondo') && !p.name.includes('Soporte')) || (p.name.includes('Trasera') && !p.name.includes('Barra') && !p.name.includes('Caja Cajón')));
     const partQty = p.qty * multiplier;
 
     let groupKey = '';
@@ -231,28 +233,22 @@ export function KitchenBlueprint() {
     let thick = thicknessMm;
     const matName = getColorName(p.material);
 
-    if (isBack) {
+    if (isHPL) {
+      groupKey = `HPL_SHEETS_${p.material || 'abet'}`;
+      label = `PLANCHA LAMINADO HPL 0.9MM (ABET LAMINATI 2 CARAS) - COLOR: ${matName}${multiplier > 1 ? ` [LOTE ${multiplier} UN]` : ''}`;
+      materialCategory = 'hpl';
+      w = 3050;
+      h = 1300;
+      thick = 0.9;
+    } else if (isBack) {
       groupKey = `BACKS_${p.material || 'mdf3mm'}`;
       label = `PLANCHA DUROLAC / MDF 3MM (FONDOS Y TRASERAS) - COLOR: ${matName}${multiplier > 1 ? ` [LOTE ${multiplier} UN]` : ''}`;
       materialCategory = 'backs';
       thick = 3;
-    } else if (isFront) {
-      if (isHPL) {
-        groupKey = `HPL_DOORS_${p.material || 'abet'}`;
-        label = `PLANCHA LAMINADO HPL PUERTAS Y FRENTES 0.9MM (ABET LAMINATI) - COLOR: ${matName}${multiplier > 1 ? ` [LOTE ${multiplier} UN]` : ''}`;
-        materialCategory = 'hpl';
-        w = 3050;
-        h = 1300;
-        thick = 0.9;
-      } else {
-        groupKey = `MEL_DOORS_${p.material}`;
-        label = `PLANCHA MELAMINA PUERTAS Y FRENTES ${thicknessMm}MM - COLOR: ${matName}${multiplier > 1 ? ` [LOTE ${multiplier} UN]` : ''}`;
-        materialCategory = 'doors';
-      }
     } else {
-      groupKey = `MEL_STRUCT_${p.material}`;
-      label = `PLANCHA MELAMINA ESTRUCTURA Y CAJONES ${thicknessMm}MM - COLOR: ${matName}${multiplier > 1 ? ` [LOTE ${multiplier} UN]` : ''}`;
-      materialCategory = 'structure';
+      thick = p.thickness || thicknessMm;
+      groupKey = `MEL_${thick}_${p.material}`;
+      materialCategory = isFront ? 'doors' : 'structure';
     }
 
     if (!boardGroups[groupKey]) {
@@ -260,27 +256,32 @@ export function KitchenBlueprint() {
         key: groupKey,
         label,
         materialCategory,
-        materialName: isHPL ? `${matName} (Laminado HPL)` : matName,
+        materialName: isHPL ? `${matName} (Laminado HPL 2 Caras)` : matName,
         color: p.material || '#FFFFFF',
         thicknessMm: thick,
         w,
         h,
-        parts: []
+        parts: [],
+        hasDoors: isFront,
+        hasStruct: !isFront && !isBack && !isHPL
       };
+    } else {
+      if (isFront) boardGroups[groupKey].hasDoors = true;
+      if (!isFront && !isBack && !isHPL) boardGroups[groupKey].hasStruct = true;
     }
 
     const isWoodGrain = p.material?.includes('roble') || p.material?.includes('nogal') || p.material?.includes('madera') || p.material?.includes('hickory') || p.material?.includes('wood');
     const allowRotation = isBack ? true : !isWoodGrain;
 
     if (isHPL) {
-      // 1. Plancha HPL Abet Laminati (3050 x 1300 mm): corte con sobremedida de +1 cm (+10 mm) en largo y ancho
+      // 1. Plancha HPL Abet Laminati (3050 x 1300 mm): 2 caras por pieza con sobremedida de +1 cm (+10 mm)
       boardGroups[groupKey].parts.push({
         id: `p-hpl-${pIdx}-${p.name}`,
-        name: `${p.name} (HPL +1cm refilado)`,
+        name: `${p.name} (HPL 2 Caras +1cm refilado)`,
         width: Math.round(p.width) + 10,
         length: Math.round(p.length) + 10,
         color: p.material || '#FFFFFF',
-        qty: partQty,
+        qty: partQty * 2,
         edgeL1: false,
         edgeL2: false,
         edgeW1: false,
@@ -288,16 +289,18 @@ export function KitchenBlueprint() {
         allowRotation: false // Respetar orientación de diseño en laminado Abet
       });
 
-      // 2. Plancha MDF Crudo 18mm (Sustrato Base): corte a la medida final del mueble
-      const subKey = 'MDF_CRUDO_SUSTRATO_18MM';
+      // 2. Plancha MDF Crudo (Sustrato Unificado para toda la carpintería HPL)
+      const cab = kState.cabinets.find(c => c.id === p.moduleId);
+      const subThick = cab?.hplSubstrateThickness || state.hplSubstrateThickness || 18;
+      const subKey = `MDF_CRUDO_SUSTRATO_${subThick}MM`;
       if (!boardGroups[subKey]) {
         boardGroups[subKey] = {
           key: subKey,
-          label: `PLANCHA MDF CRUDO 18MM (SUSTRATO BASE PUERTAS Y FRENTES HPL)${multiplier > 1 ? ` [LOTE ${multiplier} UN]` : ''}`,
-          materialCategory: 'doors',
-          materialName: 'MDF Crudo 18mm (Sustrato Base)',
+          label: `PLANCHA MDF CRUDO ${subThick}MM (SUSTRATO ESTRUCTURA, PUERTAS Y CAJONES HPL)${multiplier > 1 ? ` [LOTE ${multiplier} UN]` : ''}`,
+          materialCategory: 'structure',
+          materialName: `MDF Crudo ${subThick}mm (Sustrato Base)`,
           color: '#E2D9C8',
-          thicknessMm: 18,
+          thicknessMm: subThick,
           w: 2440,
           h: 1830,
           parts: []
@@ -305,7 +308,7 @@ export function KitchenBlueprint() {
       }
       boardGroups[subKey].parts.push({
         id: `p-mdf-${pIdx}-${p.name}`,
-        name: `${p.name} (Sustrato MDF 18mm)`,
+        name: `${p.name} (Sustrato MDF ${subThick}mm)`,
         width: Math.round(p.width),
         length: Math.round(p.length),
         color: '#E2D9C8',
@@ -330,6 +333,22 @@ export function KitchenBlueprint() {
         edgeW2: isBack ? false : !!p.edgeW2,
         allowRotation
       });
+    }
+  });
+
+  // Ajustar etiquetas dinámicas según composición real de piezas
+  Object.values(boardGroups).forEach(group => {
+    if (group.key.startsWith('MEL_')) {
+      if (group.hasDoors && group.hasStruct) {
+        group.label = `PLANCHA MELAMINA ${group.thicknessMm}MM (PUERTAS Y ESTRUCTURA) - COLOR: ${group.materialName}${multiplier > 1 ? ` [LOTE ${multiplier} UN]` : ''}`;
+        group.materialCategory = 'structure';
+      } else if (group.hasDoors) {
+        group.label = `PLANCHA MELAMINA PUERTAS Y FRENTES ${group.thicknessMm}MM - COLOR: ${group.materialName}${multiplier > 1 ? ` [LOTE ${multiplier} UN]` : ''}`;
+        group.materialCategory = 'doors';
+      } else {
+        group.label = `PLANCHA MELAMINA ESTRUCTURA Y CAJONES ${group.thicknessMm}MM - COLOR: ${group.materialName}${multiplier > 1 ? ` [LOTE ${multiplier} UN]` : ''}`;
+        group.materialCategory = 'structure';
+      }
     }
   });
 
@@ -391,23 +410,26 @@ export function KitchenBlueprint() {
 
       const matchingPatterns = groupedBoardResults.filter(b => {
         const matLower = (b.materialName || '').toLowerCase();
-        if (itemLower.includes('puertas') || itemLower.includes('frentes')) {
-          if (itemLower.includes('mdf crudo') || itemLower.includes('sustrato')) {
-            return matLower.includes('sustrato') || matLower.includes('mdf crudo');
-          }
-          if (itemLower.includes('hpl') || itemLower.includes('laminado')) {
-            return b.materialCategory === 'hpl' && (!decorFilter || matLower.includes(decorFilter) || decorFilter.includes(matLower));
-          }
-          if (b.materialCategory === 'doors') {
-            return !decorFilter || matLower.includes(decorFilter) || decorFilter.includes(matLower);
-          }
-          return false;
+        if (itemLower.includes('mdf crudo') || itemLower.includes('sustrato')) {
+          return matLower.includes('sustrato') || matLower.includes('mdf crudo');
+        }
+        if (itemLower.includes('hpl') || itemLower.includes('laminado')) {
+          return b.materialCategory === 'hpl' && (!decorFilter || matLower.includes(decorFilter) || decorFilter.includes(matLower));
         }
         if (itemLower.includes('traseras') || itemLower.includes('fondos') || itemLower.includes('durolac')) {
           return b.materialCategory === 'backs';
         }
-        if (itemLower.includes('estructura') || itemLower.includes('cajones')) {
-          if (b.materialCategory === 'structure') {
+        if (itemLower.includes('puertas') && itemLower.includes('estructura')) {
+          return (b.materialCategory === 'structure' || b.materialCategory === 'doors') && (!decorFilter || matLower.includes(decorFilter) || decorFilter.includes(matLower));
+        }
+        if (itemLower.includes('puertas') || itemLower.includes('frentes')) {
+          if (b.materialCategory === 'doors' || (b.materialCategory === 'structure' && b.label.includes('PUERTAS'))) {
+            return !decorFilter || matLower.includes(decorFilter) || decorFilter.includes(matLower);
+          }
+          return false;
+        }
+        if (itemLower.includes('estructura') || itemLower.includes('cajones') || itemLower.includes('melamina')) {
+          if (b.materialCategory === 'structure' || b.materialCategory === 'doors') {
             return !decorFilter || matLower.includes(decorFilter) || decorFilter.includes(matLower);
           }
           return false;
@@ -1485,13 +1507,29 @@ export function KitchenBlueprint() {
                 </g>
               ) : cab.variant === 'hospital_niche_open' ? (
                 <g>
-                  {/* Nicho Abierto 300 mm con 2 repisas vistas */}
+                  {/* Nicho Abierto 300 mm con repisas configurables (0 a 4) */}
                   <rect x={0} y={0} width={cabW} height={bodyH} fill="#f8fafc" stroke="#0f172a" strokeWidth={strokeElev * 1.2} />
-                  <rect x={15} y={bodyH * 0.33} width={cabW - 30} height={18} fill="#e2e8f0" stroke="#0f172a" strokeWidth={strokeElev * 0.8} />
-                  <rect x={15} y={bodyH * 0.66} width={cabW - 30} height={18} fill="#e2e8f0" stroke="#0f172a" strokeWidth={strokeElev * 0.8} />
-                  <text x={cabW / 2} y={bodyH * 0.20} fontSize={Math.max(12, fSizeElev * 0.38)} fill="#475569" fontWeight="bold" textAnchor="middle">NICHO CLÍNICO</text>
-                  <text x={cabW / 2} y={bodyH * 0.52} fontSize={Math.max(11, fSizeElev * 0.34)} fill="#64748b" textAnchor="middle">INSUMOS</text>
-                  <text x={cabW / 2} y={bodyH * 0.85} fontSize={Math.max(11, fSizeElev * 0.34)} fill="#64748b" textAnchor="middle">DISPENSADOR</text>
+                  {(() => {
+                    const count = cab.shelvesCount !== undefined ? cab.shelvesCount : 2;
+                    if (count === 0) {
+                      return (
+                        <text x={cabW / 2} y={bodyH * 0.5} fontSize={Math.max(12, fSizeElev * 0.38)} fill="#475569" fontWeight="bold" textAnchor="middle">NICHO CLÍNICO LIBRE</text>
+                      );
+                    }
+                    const step = bodyH / (count + 1);
+                    return (
+                      <>
+                        {Array.from({ length: count }).map((_, si) => {
+                          const sy = (si + 1) * step;
+                          return (
+                            <rect key={si} x={15} y={sy - 9} width={cabW - 30} height={18} fill="#e2e8f0" stroke="#0f172a" strokeWidth={strokeElev * 0.8} />
+                          );
+                        })}
+                        <text x={cabW / 2} y={Math.min(bodyH * 0.2, step * 0.55)} fontSize={Math.max(12, fSizeElev * 0.38)} fill="#475569" fontWeight="bold" textAnchor="middle">NICHO CLÍNICO</text>
+                        <text x={cabW / 2} y={Math.max(bodyH * 0.85, bodyH - step * 0.4)} fontSize={Math.max(11, fSizeElev * 0.34)} fill="#64748b" textAnchor="middle">INSUMOS</text>
+                      </>
+                    );
+                  })()}
                 </g>
               ) : cab.variant === '4_drawers' ? (
                 isBaseGola ? (
@@ -3031,7 +3069,7 @@ export function KitchenBlueprint() {
                                 <g stroke="#0f172a" strokeWidth="0.7">
                                   <line x1={cLeftX} y1={cTopY + bodyH * 0.5} x2={cLeftX + cW} y2={cTopY + bodyH * 0.5} />
                                 </g>
-                              ) : cab.variant === '2_doors' || cab.variant === 'wall_2_doors' || cab.variant === 'tall_2_doors' ? (
+                              ) : cab.variant === '2_doors' || cab.variant === 'wall_2_doors' || cab.variant === 'tall_2_doors' || cab.variant === 'hospital_meson_2doors' ? (
                                 <g stroke="#0f172a" strokeWidth="0.7">
                                   <line x1={cLeftX + cW / 2} y1={cTopY} x2={cLeftX + cW / 2} y2={bodyBottomY} />
                                   {/* Diagonales de apertura */}

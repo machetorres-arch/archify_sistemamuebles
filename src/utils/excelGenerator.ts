@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx-js-style';
 import { useStore } from '../store';
+import { getFriendlyColorName } from './colorNames';
 
 export const exportToExcel = () => {
   const state = useStore.getState();
@@ -26,26 +27,7 @@ export const exportToExcel = () => {
   let totalScrews = 0;
   let totalDowels = 0;
 
-  const DEFAULT_NAMES: Record<string, string> = {
-  '#FFFFFF': 'Blanco',
-  '#171717': 'Negro',
-  '#F8F9FA': 'Bianco Polo',
-  '#202020': 'Nero'
-};
-
-const getTextureName = (urlOrColor: string) => {
-    if (!urlOrColor) return 'Color Sólido';
-    if (urlOrColor.startsWith('data:') || urlOrColor.startsWith('http')) {
-       const tex = customTextures.find((t: any) => t.url === urlOrColor);
-       return tex ? tex.name.replace(/\.[^/.]+$/, "") : 'Textura Personalizada';
-    }
-    
-    if (DEFAULT_NAMES[urlOrColor.toUpperCase()]) {
-       return DEFAULT_NAMES[urlOrColor.toUpperCase()];
-    }
-    
-    return `Color ${urlOrColor}`;
-  };
+  const getTextureName = (urlOrColor: string) => getFriendlyColorName(urlOrColor, customTextures);
   
   // Helpers
   const addPiece = (gabinete: string, name: string, w: number, h: number, qty: number, material: string, cantosLargo: number, cantosAncho: number, colorUrl: string, edgeThickness: number, isFront: boolean) => {
@@ -95,20 +77,23 @@ const getTextureName = (urlOrColor: string) => {
     }
     
     // Y siempre agregamos la placa de sustrato (MDF o Melamina) a dataPlacas
-    // Si es HPL, el sustrato es MDF desnudo (15mm o según thickness)
-    const baseMaterial = material === 'hpl' ? 'MDF Desnudo (Sustrato)' : decorName;
+    // Si es HPL, el sustrato es MDF desnudo (15mm o 18mm según hplSubstrateThickness) con formato 2440x1520 mm
+    const substrateThick = state.hplSubstrateThickness || 15;
+    const baseMaterial = material === 'hpl' ? `MDF Desnudo ${substrateThick}mm (Sustrato HPL)` : decorName;
+    const pieceThickness = material === 'hpl' ? substrateThick : (state.thickness * 10);
     
     dataPlacas.push({
       'Gabinete': gabinete,
       'Pieza': name,
-      'Material': materialName || material, // Usa el material pasado (ej. 'melamina')
+      'Material': material === 'hpl' ? `MDF Desnudo ${substrateThick}mm (Formato 2440 × 1520 mm)` : (materialName || material),
       'Decorativo': baseMaterial,
+      'Formato Placa (mm)': material === 'hpl' ? '2440 × 1520' : '2440 × 1830',
       'Cortes Totales': qty,
       'Cantidad': qty,
       'Largo (mm)': (h * 10).toFixed(1),
       'Ancho (mm)': (w * 10).toFixed(1),
-      'Veta (Orientación)': 'Vertical',
-      'Espesor (mm)': state.thickness,
+      'Veta (Orientación)': material === 'hpl' ? 'Libre (Sin Veta)' : 'Vertical',
+      'Espesor (mm)': pieceThickness,
       'Tapacanto Largo 1': cantosLargo > 0 ? 'Sí' : 'No',
       'Tapacanto Largo 2': cantosLargo > 1 ? 'Sí' : 'No',
       'Tapacanto Ancho 1': cantosAncho > 0 ? 'Sí' : 'No',
@@ -195,7 +180,7 @@ const getTextureName = (urlOrColor: string) => {
       const drawerDepth = depth - 10;
       addPiece(gabName, `Caja Cajón Lateral`, drawerDepth, 15, mod.drawers * 2, 'melamina', 1, 0, structureColor, edgeBandingThicknessCabinets, false);
       addPiece(gabName, `Caja Cajón Trasera`, frontWidth - 5, 15, mod.drawers, 'melamina', 1, 0, structureColor, edgeBandingThicknessCabinets, false);
-      addPiece(gabName, `Fondo Cajón (MDF 3mm)`, frontWidth - 5, drawerDepth, mod.drawers, 'melamina', 0, 0, structureColor, edgeBandingThicknessCabinets, false);
+      addPiece(gabName, `Fondo Cajón (Melamina 15mm)`, frontWidth - 5, drawerDepth, mod.drawers, 'melamina', 1, 0, structureColor, edgeBandingThicknessCabinets, false);
       
       totalDrawerSlides += mod.drawers;
       totalScrews += mod.drawers * 8;

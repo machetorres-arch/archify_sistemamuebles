@@ -143,9 +143,49 @@ export function Configurator() {
       </div>
 
       {[state.structureMaterial, state.doorMaterial, state.drawerFrontMaterial, state.drawerInnerMaterial, state.shelfMaterial].includes('hpl') && (
-        <div className="mb-6 p-3 border border-orange-500/30 rounded-lg bg-orange-500/10">
-          <ToggleBtn active={state.hplBalancer} onClick={() => state.setHplBalancer(!state.hplBalancer)} label="Trascara: Balancer Blanco (0.9mm)" />
-          <p className="text-[9px] text-slate-400 mt-2 leading-tight">Si se activa, la cara interior (trascara) de las piezas enchapadas llevará HPL Blanco de 0.9mm. Si se apaga, se enchapará por ambas caras con el diseño elegido.</p>
+        <div className="mb-6 p-3 border border-orange-500/30 rounded-lg bg-orange-500/10 flex flex-col gap-3">
+          <div>
+            <ToggleBtn active={state.hplBalancer} onClick={() => state.setHplBalancer(!state.hplBalancer)} label="Trascara: Balancer Blanco (0.9mm)" />
+            <p className="text-[9px] text-slate-400 mt-1.5 leading-tight">Si se activa, la cara interior (trascara) de las piezas enchapadas llevará HPL Blanco de 0.9mm. Si se apaga, se enchapará por ambas caras con el diseño elegido.</p>
+          </div>
+
+          <div className="pt-2 border-t border-orange-500/20">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[10px] uppercase tracking-widest font-bold text-orange-400">
+                Sustrato MDF Desnudo
+              </label>
+              <span className="text-[8px] font-mono font-bold px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">
+                2440 × 1520 mm
+              </span>
+            </div>
+            <p className="text-[9px] text-slate-400 mb-2 leading-tight">
+              Espesor de la placa de sustrato MDF donde se prensa el HPL.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => state.setHplSubstrateThickness(15)}
+                className={`flex-1 py-1.5 rounded text-[10px] uppercase tracking-wider font-bold transition-all cursor-pointer ${
+                  (state.hplSubstrateThickness || 15) === 15
+                    ? 'bg-orange-500 text-black shadow-[0_0_10px_rgba(249,115,22,0.25)]'
+                    : 'bg-white/5 text-slate-400 border border-white/10 hover:border-orange-500/50'
+                }`}
+              >
+                MDF 15 mm
+              </button>
+              <button
+                type="button"
+                onClick={() => state.setHplSubstrateThickness(18)}
+                className={`flex-1 py-1.5 rounded text-[10px] uppercase tracking-wider font-bold transition-all cursor-pointer ${
+                  state.hplSubstrateThickness === 18
+                    ? 'bg-orange-500 text-black shadow-[0_0_10px_rgba(249,115,22,0.25)]'
+                    : 'bg-white/5 text-slate-400 border border-white/10 hover:border-orange-500/50'
+                }`}
+              >
+                MDF 18 mm
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -1435,6 +1435,10 @@ export function getCabinetSpecsFromTool(toolMode: string, existingCabinets: any[
     // Puerta batiente con asa corrida KUTZ 12/18 y 2 repisas
     return { type: 'base', variant: 'hospital_meson_1door', name: 'Mesón 1 Puerta (KUTZ)', width: 90, height: 90, depth: 60 };
   }
+  if (toolMode === 'place_hospital_meson_2doors') {
+    // 2 Puertas batientes con asas corridas KUTZ 12/18 y 2 repisas
+    return { type: 'base', variant: 'hospital_meson_2doors', name: 'Mesón 2 Puertas (KUTZ)', width: 90, height: 90, depth: 60 };
+  }
   if (toolMode === 'place_hospital_niche_open') {
     // Nicho abierto de 300 mm para insumos
     return { type: 'base', variant: 'hospital_niche_open', name: 'Nicho Abierto Clínico 30cm', width: 30, height: 90, depth: 60 };

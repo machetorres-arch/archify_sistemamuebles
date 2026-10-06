@@ -39,6 +39,7 @@ export type ToolMode =
   | 'place_base_corner_l'
   | 'place_hospital_meson_3drawers'
   | 'place_hospital_meson_1door'
+  | 'place_hospital_meson_2doors'
   | 'place_hospital_niche_open'
   | 'place_wall' 
   | 'place_wall_1_door'
@@ -142,6 +143,7 @@ export interface CabinetType {
   grainDirection?: 'vertical' | 'horizontal';
   grainElements?: Record<string, 'vertical' | 'horizontal'>;
   hplBalancer?: boolean;
+  hplSubstrateThickness?: 15 | 18;
   isOpen?: boolean;
   openElements?: Record<string, boolean>;
   shelvesCount?: number;
@@ -164,6 +166,7 @@ export interface GolaIncompatibilityAlert {
 
 export function getCabinetLabel(cab: Partial<CabinetType>, index: number): string {
   if (cab.variant === 'hospital_meson_3drawers') return 'Mesón 3 Cajones (Trampa ANVER)';
+  if (cab.variant === 'hospital_meson_2doors') return 'Mesón 2 Puertas (Asa KUTZ)';
   if (cab.variant === 'hospital_meson_1door') return 'Mesón 1 Puerta (Asa KUTZ)';
   if (cab.variant === 'hospital_niche_open') return 'Nicho Abierto Clínico 30cm';
   if (cab.variant === 'deco_hood') return 'Campana FDV Conic 90';

@@ -1456,7 +1456,10 @@ export function generateCountertopPieces(
           : Math.round((runBacksplashHeightCm || 5) * 10);
       const latBsLengthMm = Math.max(50, run.depthMm - product.thicknessMm);
 
-      if (hasBacksplashLeft && !isWaterLeft) {
+      const shouldGenBsLeft = !isWaterLeft && (override?.backsplashLeft !== undefined ? override.backsplashLeft : hasBacksplashLeft);
+      const shouldGenBsRight = !isWaterRight && (override?.backsplashRight !== undefined ? override.backsplashRight : hasBacksplashRight);
+
+      if (shouldGenBsLeft) {
         pieces.push({
           id: `${prefix}-RESPALDO-LAT-IZQ`,
           name: `Respaldo Lateral Izquierdo (${latBsLengthMm}x${bsHeightMm}mm)`,
@@ -1471,7 +1474,7 @@ export function generateCountertopPieces(
         });
       }
 
-      if (hasBacksplashRight && !isWaterRight) {
+      if (shouldGenBsRight) {
         pieces.push({
           id: `${prefix}-RESPALDO-LAT-DER`,
           name: `Respaldo Lateral Derecho (${latBsLengthMm}x${bsHeightMm}mm)`,
@@ -1487,10 +1490,10 @@ export function generateCountertopPieces(
       }
     }
 
-    // 4. Faldones Laterales y Traseros en Extremos Libres con Regrueso (si no hay pata cascada)
+    // 4. Faldones Laterales y Traseros en Extremos Libres con Regrueso (si no hay pata cascada y existe voladizo lateral)
     if (runRegruesoCm > 0 && config.regruesoOnOverhangSides !== false) {
       const apronHeightMm = Math.round(runRegruesoCm * 10);
-      if (!isWaterLeft && run.canWaterfallLeft && run.cornerExtensionLeftMm === 0 && (run.extensionToWallLeftMm || 0) === 0) {
+      if (!isWaterLeft && (run.overhangLeftMm || 0) > 0 && run.canWaterfallLeft && run.cornerExtensionLeftMm === 0 && (run.extensionToWallLeftMm || 0) === 0) {
         pieces.push({
           id: `${prefix}-FALDON-LAT-IZQ`,
           name: `Faldón Lateral Izquierdo (${run.depthMm}x${apronHeightMm}mm)`,
@@ -1504,7 +1507,7 @@ export function generateCountertopPieces(
           runId: run.id,
         });
       }
-      if (!isWaterRight && run.canWaterfallRight && run.cornerExtensionRightMm === 0 && (run.extensionToWallRightMm || 0) === 0) {
+      if (!isWaterRight && (run.overhangRightMm || 0) > 0 && run.canWaterfallRight && run.cornerExtensionRightMm === 0 && (run.extensionToWallRightMm || 0) === 0) {
         pieces.push({
           id: `${prefix}-FALDON-LAT-DER`,
           name: `Faldón Lateral Derecho (${run.depthMm}x${apronHeightMm}mm)`,

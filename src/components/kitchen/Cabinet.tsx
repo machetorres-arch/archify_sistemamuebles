@@ -1040,6 +1040,26 @@ export function Cabinet({ id, type, variant, width, height, depth, position, rot
 
    const thickness = 1.5;
 
+   const isWhiteDrawerFinish = (c?: string) => {
+      if (!c) return true;
+      const lower = c.toLowerCase().trim();
+      return (
+         lower === '#ffffff' ||
+         lower === '#fff' ||
+         lower === '#f8fafc' ||
+         lower === '#f3f4f6' ||
+         lower === '#e5e7eb' ||
+         lower === '#dddddd' ||
+         lower === 'white' ||
+         lower === 'blanco' ||
+         lower.includes('blanco') ||
+         lower.includes('white')
+      );
+   };
+
+   const drawerBottomThick = thickness;
+   const drawerBottomProps = parseColor(cInner, drawerInnerMaterial);
+
    // Riel Gola Continuo (Provelcar 300cm):
    // Pasa continuo a lo ancho completo del gabinete (-width/2 a +width/2) alojándose perfectamente
    // en los rebajes CNC de los laterales sin interrupciones ni desfaces visuales.
@@ -1152,16 +1172,19 @@ export function Cabinet({ id, type, variant, width, height, depth, position, rot
             const yBoxBottom = yBoxCenter - sideHeight/2;
             const yBottomPanel = yBoxBottom + 1.2;
             
+            const slideH = 3.5;
+            const ySlide = yBoxCenter - sideHeight * 0.1;
+            
             return (
                <group key={keyPrefix}>
-                  {/* Fixed Undermount Slides (Attached to Cabinet) */}
-                  <mesh position={[-innerW/2 + 1.225, yBoxBottom + 0.6, slideZCenter]}>
-                     <boxGeometry args={[2.45, 1.2, nominalLength]} />
-                     <meshStandardMaterial color="#999999" metalness={0.8} roughness={0.2} />
+                  {/* Rieles Telescópicos Fijos (Adosados a los laterales interiores del mueble) */}
+                  <mesh position={[-innerW/2 + 0.45, ySlide, slideZCenter]}>
+                     <boxGeometry args={[0.55, slideH, nominalLength]} />
+                     <meshStandardMaterial color="#94a3b8" metalness={0.9} roughness={0.25} />
                   </mesh>
-                  <mesh position={[innerW/2 - 1.225, yBoxBottom + 0.6, slideZCenter]}>
-                     <boxGeometry args={[2.45, 1.2, nominalLength]} />
-                     <meshStandardMaterial color="#999999" metalness={0.8} roughness={0.2} />
+                  <mesh position={[innerW/2 - 0.45, ySlide, slideZCenter]}>
+                     <boxGeometry args={[0.55, slideH, nominalLength]} />
+                     <meshStandardMaterial color="#94a3b8" metalness={0.9} roughness={0.25} />
                   </mesh>
 
                   <AnimatedDrawer 
@@ -1190,7 +1213,7 @@ export function Cabinet({ id, type, variant, width, height, depth, position, rot
                      <Board position={[skw/2 - thickness/2, yBoxCenter, drawerBoxZCenter]} args={[thickness, sideHeight, drawerBoxLength]} {...parseColor(cInner, drawerInnerMaterial)} />
                      <Board position={[0, yBoxCenter + 0.6, drawerBoxZCenter - drawerBoxLength/2 + thickness/2]} args={[skw - thickness*2, sideHeight - 1.2, thickness]} {...parseColor(cInner, drawerInnerMaterial)} />
                      <Board position={[0, yBoxCenter + 0.6, drawerBoxZCenter + drawerBoxLength/2 - thickness/2]} args={[skw - thickness*2, sideHeight - 1.2, thickness]} {...parseColor(cInner, drawerInnerMaterial)} />
-                     <Board position={[0, yBottomPanel + 0.15, drawerBoxZCenter]} args={[skw - thickness*2, 0.3, drawerBoxLength - thickness*2]} color="#dddddd" />
+                     <Board position={[0, yBottomPanel + drawerBottomThick / 2, drawerBoxZCenter]} args={[skw - thickness*2, drawerBottomThick, drawerBoxLength - thickness*2]} {...drawerBottomProps} />
                      
                      {/* Uniones del Cajón a la Trasera y al Contrafrente */}
                      <AssemblyJoint position={[-skw/2 + thickness, yBoxCenter, drawerBoxZCenter - drawerBoxLength/2 + thickness]} length={sideHeight} axis="y" pointing="right" thickness={thickness} count={1} overrideAssemblyType={useStore.getState().drawerAssemblyType} />
@@ -1198,15 +1221,27 @@ export function Cabinet({ id, type, variant, width, height, depth, position, rot
                      <AssemblyJoint position={[-skw/2 + thickness, yBoxCenter, drawerBoxZCenter + drawerBoxLength/2 - thickness]} length={sideHeight} axis="y" pointing="right" thickness={thickness} count={1} overrideAssemblyType={useStore.getState().drawerAssemblyType} />
                      <AssemblyJoint position={[skw/2 - thickness, yBoxCenter, drawerBoxZCenter + drawerBoxLength/2 - thickness]} length={sideHeight} axis="y" pointing="left" thickness={thickness} count={1} overrideAssemblyType={useStore.getState().drawerAssemblyType} />
 
-                     {/* Movable Undermount Slides */}
-                     <mesh position={[-skw/2 + thickness + 1.0, yBoxBottom + 0.6, drawerBoxZCenter]}>
-                        <boxGeometry args={[2.0, 1.2, drawerBoxLength]} />
-                        <meshStandardMaterial color="#cccccc" metalness={0.7} roughness={0.3} />
-                     </mesh>
-                     <mesh position={[skw/2 - thickness - 1.0, yBoxBottom + 0.6, drawerBoxZCenter]}>
-                        <boxGeometry args={[2.0, 1.2, drawerBoxLength]} />
-                        <meshStandardMaterial color="#cccccc" metalness={0.7} roughness={0.3} />
-                     </mesh>
+                     {/* Rieles Telescópicos Móviles (Solidarios al costado exterior del cajón) */}
+                     <group position={[-skw/2 - 0.35, ySlide, drawerBoxZCenter]}>
+                        <mesh position={[0, 0, 0]}>
+                           <boxGeometry args={[0.45, slideH - 0.8, drawerBoxLength]} />
+                           <meshStandardMaterial color="#cbd5e1" metalness={0.95} roughness={0.2} />
+                        </mesh>
+                        <mesh position={[-0.05, 0, 0]}>
+                           <boxGeometry args={[0.2, 0.5, drawerBoxLength]} />
+                           <meshStandardMaterial color="#475569" metalness={0.85} roughness={0.3} />
+                        </mesh>
+                     </group>
+                     <group position={[skw/2 + 0.35, ySlide, drawerBoxZCenter]}>
+                        <mesh position={[0, 0, 0]}>
+                           <boxGeometry args={[0.45, slideH - 0.8, drawerBoxLength]} />
+                           <meshStandardMaterial color="#cbd5e1" metalness={0.95} roughness={0.2} />
+                        </mesh>
+                        <mesh position={[0.05, 0, 0]}>
+                           <boxGeometry args={[0.2, 0.5, drawerBoxLength]} />
+                           <meshStandardMaterial color="#475569" metalness={0.85} roughness={0.3} />
+                        </mesh>
+                     </group>
                   </AnimatedDrawer>
                </group>
             );
@@ -1230,16 +1265,19 @@ export function Cabinet({ id, type, variant, width, height, depth, position, rot
             const uCutoutLength = Math.max(16, drawerBoxLength - 12);
             const frontBandLength = drawerBoxLength - uCutoutLength;
 
+            const slideH = 3.5;
+            const ySlide = yBoxCenter - sideHeight * 0.1;
+
             return (
                <group key="sink-u-drawer">
-                  {/* Correderas ocultas fijadas a los laterales del mueble */}
-                  <mesh position={[-innerW / 2 + 1.225, yBoxBottom + 0.6, slideZCenter]}>
-                     <boxGeometry args={[2.45, 1.2, nominalLength]} />
-                     <meshStandardMaterial color="#999999" metalness={0.8} roughness={0.2} />
+                  {/* Rieles Telescópicos Fijos (Adosados a los laterales interiores del mueble) */}
+                  <mesh position={[-innerW / 2 + 0.45, ySlide, slideZCenter]}>
+                     <boxGeometry args={[0.55, slideH, nominalLength]} />
+                     <meshStandardMaterial color="#94a3b8" metalness={0.9} roughness={0.25} />
                   </mesh>
-                  <mesh position={[innerW / 2 - 1.225, yBoxBottom + 0.6, slideZCenter]}>
-                     <boxGeometry args={[2.45, 1.2, nominalLength]} />
-                     <meshStandardMaterial color="#999999" metalness={0.8} roughness={0.2} />
+                  <mesh position={[innerW / 2 - 0.45, ySlide, slideZCenter]}>
+                     <boxGeometry args={[0.55, slideH, nominalLength]} />
+                     <meshStandardMaterial color="#94a3b8" metalness={0.9} roughness={0.25} />
                   </mesh>
 
                   {/* Sifón Sanitario 3D en el vano posterior del mueble (tubos cromados/PVC) */}
@@ -1340,32 +1378,44 @@ export function Cabinet({ id, type, variant, width, height, depth, position, rot
                      <AssemblyJoint position={[-skw / 2 + thickness, yBoxCenter, drawerBoxZCenter + drawerBoxLength / 2 - thickness]} length={sideHeight} axis="y" pointing="right" thickness={thickness} count={1} overrideAssemblyType={useStore.getState().drawerAssemblyType} />
                      <AssemblyJoint position={[skw / 2 - thickness, yBoxCenter, drawerBoxZCenter + drawerBoxLength / 2 - thickness]} length={sideHeight} axis="y" pointing="left" thickness={thickness} count={1} overrideAssemblyType={useStore.getState().drawerAssemblyType} />
 
-                     {/* Fondo de Cajón 3mm con forma en U (alas y unión frontal) */}
+                     {/* Fondo de Cajón con forma en U (alas y unión frontal) */}
                      <Board
-                        position={[-skw / 2 + wingW / 2, yBottomPanel, drawerBoxZCenter]}
-                        args={[wingW, 0.3, drawerBoxLength]}
-                        color="#dddddd"
+                        position={[-skw / 2 + wingW / 2, yBottomPanel + drawerBottomThick / 2, drawerBoxZCenter]}
+                        args={[wingW, drawerBottomThick, drawerBoxLength]}
+                        {...drawerBottomProps}
                      />
                      <Board
-                        position={[skw / 2 - wingW / 2, yBottomPanel, drawerBoxZCenter]}
-                        args={[wingW, 0.3, drawerBoxLength]}
-                        color="#dddddd"
+                        position={[skw / 2 - wingW / 2, yBottomPanel + drawerBottomThick / 2, drawerBoxZCenter]}
+                        args={[wingW, drawerBottomThick, drawerBoxLength]}
+                        {...drawerBottomProps}
                      />
                      <Board
-                        position={[0, yBottomPanel, drawerBoxZCenter + drawerBoxLength / 2 - frontBandLength / 2]}
-                        args={[uCutoutW, 0.3, frontBandLength]}
-                        color="#dddddd"
+                        position={[0, yBottomPanel + drawerBottomThick / 2, drawerBoxZCenter + drawerBoxLength / 2 - frontBandLength / 2]}
+                        args={[uCutoutW, drawerBottomThick, frontBandLength]}
+                        {...drawerBottomProps}
                      />
 
-                     {/* Correderas móviles bajo el cajón */}
-                     <mesh position={[-skw / 2 + thickness + 1.0, yBoxBottom + 0.6, drawerBoxZCenter]}>
-                        <boxGeometry args={[2.0, 1.2, drawerBoxLength]} />
-                        <meshStandardMaterial color="#cccccc" metalness={0.7} roughness={0.3} />
-                     </mesh>
-                     <mesh position={[skw / 2 - thickness - 1.0, yBoxBottom + 0.6, drawerBoxZCenter]}>
-                        <boxGeometry args={[2.0, 1.2, drawerBoxLength]} />
-                        <meshStandardMaterial color="#cccccc" metalness={0.7} roughness={0.3} />
-                     </mesh>
+                     {/* Rieles Telescópicos Móviles (Solidarios al costado exterior del cajón) */}
+                     <group position={[-skw / 2 - 0.35, ySlide, drawerBoxZCenter]}>
+                        <mesh position={[0, 0, 0]}>
+                           <boxGeometry args={[0.45, slideH - 0.8, drawerBoxLength]} />
+                           <meshStandardMaterial color="#cbd5e1" metalness={0.95} roughness={0.2} />
+                        </mesh>
+                        <mesh position={[-0.05, 0, 0]}>
+                           <boxGeometry args={[0.2, 0.5, drawerBoxLength]} />
+                           <meshStandardMaterial color="#475569" metalness={0.85} roughness={0.3} />
+                        </mesh>
+                     </group>
+                     <group position={[skw / 2 + 0.35, ySlide, drawerBoxZCenter]}>
+                        <mesh position={[0, 0, 0]}>
+                           <boxGeometry args={[0.45, slideH - 0.8, drawerBoxLength]} />
+                           <meshStandardMaterial color="#cbd5e1" metalness={0.95} roughness={0.2} />
+                        </mesh>
+                        <mesh position={[0.05, 0, 0]}>
+                           <boxGeometry args={[0.2, 0.5, drawerBoxLength]} />
+                           <meshStandardMaterial color="#475569" metalness={0.85} roughness={0.3} />
+                        </mesh>
+                     </group>
                   </AnimatedDrawer>
                </group>
             );
@@ -2118,12 +2168,70 @@ export function Cabinet({ id, type, variant, width, height, depth, position, rot
             );
          }
 
-         if (effectiveVariant === 'hospital_niche_open') {
-            // Nicho Abierto 300 mm sin puerta para insumos clínicos
+         if (effectiveVariant === 'hospital_meson_2doors') {
+            const doorW = (width - gap * 3) / 2;
+            const topDeduct = kutzTopDeduct;
+            const gapY = kutzGapY;
+            const doorH = Math.max(10, cabH - topDeduct - gapY);
+            const doorY = legsHeight + gapY + doorH / 2;
+            const leftDoorX = -width / 2 + gap + doorW / 2;
+            const rightDoorX = width / 2 - gap - doorW / 2;
             return (
                <>
-                  {renderShelfWithJoints(legsHeight + cabH * 0.33, 'niche-shelf-1')}
-                  {renderShelfWithJoints(legsHeight + cabH * 0.66, 'niche-shelf-2')}
+                  <AnimatedDoor
+                     key="hosp-door-left"
+                     position={[leftDoorX, doorY, frontZ]}
+                     doorW={doorW}
+                     doorH={doorH}
+                     thickness={thickness}
+                     isRightHinge={false}
+                     isUpper={false}
+                     colorProps={parseColor(cDoors, doorMaterial, 'door-0')}
+                     forceOpen={isElementOpen('door-0')}
+                     onClickAction={() => setOpenElement(id, 'door-0', !isElementOpen('door-0'))}
+                     globalPosition={[position[0] + leftDoorX, position[1] + doorY, position[2] + frontZ]}
+                     handleConfig={handleConfig || { model: 'kutz_asa', finish: 'anodizado_inox', lengthMm: doorW * 10, orientation: 'horizontal' }}
+                  />
+                  <AnimatedDoor
+                     key="hosp-door-right"
+                     position={[rightDoorX, doorY, frontZ]}
+                     doorW={doorW}
+                     doorH={doorH}
+                     thickness={thickness}
+                     isRightHinge={true}
+                     isUpper={false}
+                     colorProps={parseColor(cDoors, doorMaterial, 'door-1')}
+                     forceOpen={isElementOpen('door-1')}
+                     onClickAction={() => setOpenElement(id, 'door-1', !isElementOpen('door-1'))}
+                     globalPosition={[position[0] + rightDoorX, position[1] + doorY, position[2] + frontZ]}
+                     handleConfig={handleConfig || { model: 'kutz_asa', finish: 'anodizado_inox', lengthMm: doorW * 10, orientation: 'horizontal' }}
+                  />
+                  {/* Repisas interiores paramétricas con Anti-Colisión */}
+                  {(() => {
+                     const cabObj: CabinetType = { id, type, variant, width, height, depth, position, rotation, color, shelvesCount };
+                     const shelfElevations = getResolvedCabinetShelfElevations(cabObj, thickness);
+                     return shelfElevations.map((elev, sIdx) => (
+                        <React.Fragment key={`hosp-2d-shelf-${sIdx}`}>
+                           {renderShelfWithJoints(legsHeight + elev, `hosp-2d-shelf-${sIdx}`)}
+                        </React.Fragment>
+                     ));
+                  })()}
+               </>
+            );
+         }
+
+         if (effectiveVariant === 'hospital_niche_open') {
+            // Nicho Abierto 300 mm sin puerta para insumos clínicos (0 a 4 repisas)
+            const count = shelvesCount !== undefined ? shelvesCount : 2;
+            if (count <= 0) return null;
+            const step = cabH / (count + 1);
+            return (
+               <>
+                  {Array.from({ length: count }, (_, sIdx) => (
+                     <React.Fragment key={`niche-shelf-${sIdx}`}>
+                        {renderShelfWithJoints(legsHeight + (sIdx + 1) * step, `niche-shelf-${sIdx}`)}
+                     </React.Fragment>
+                  ))}
                </>
             );
          }
@@ -2950,6 +3058,9 @@ export function Cabinet({ id, type, variant, width, height, depth, position, rot
                const isWineRack = variant?.includes('wine_rack') || variant === 'base_wine_rack' || variant === 'wall_wine_rack' || variant === 'tall_wine_rack' || variant === 'island_wine_rack';
                const botDepth = isWineRack ? depth + thickness : depth;
                const botZ = isWineRack ? thickness / 2 : 0;
+               const isBaseOrIslandCab = type === 'base' || type === 'island';
+               const standardBackH = isBaseOrIslandCab ? (cabH - thickness) : (cabH - thickness * 2);
+               const standardBackY = isBaseOrIslandCab ? (legsHeight + thickness + standardBackH / 2) : (legsHeight + cabH / 2);
                return (
                   <>
                      <Board position={[0, legsHeight + thickness/2, botZ]} args={[innerW, thickness, botDepth]} {...parseColor(cStructure, structureMaterial, 'bottom')} />
@@ -2963,7 +3074,7 @@ export function Cabinet({ id, type, variant, width, height, depth, position, rot
                            )}
                         </>
                      ) : (
-                        <Board position={[0, legsHeight + cabH/2, -depth/2 + thickness/2]} args={[innerW, cabH - thickness*2, thickness]} {...parseColor(cBack, backMaterial, 'back')} />
+                        <Board position={[0, standardBackY, -depth/2 + thickness/2]} args={[innerW, standardBackH, thickness]} {...parseColor(cBack, backMaterial, 'back')} />
                      )}
                      
                      {/* Uniones estructurales de Base a Laterales */}

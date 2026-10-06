@@ -120,7 +120,7 @@ export function Blueprint() {
       allowRotation = false; // keep vertical or preserve pattern
     }
 
-    const isBack = p.material === 'Melamina Fondo' || p.thickness === 3 || p.name.startsWith('Trasera') || p.name.startsWith('Fondo Cajón');
+    const isBack = p.thickness <= 4 && (p.material === 'Melamina Fondo' || p.thickness === 3 || p.thickness === 3.5 || p.name.startsWith('Trasera'));
 
     if (materialType === 'hpl') {
       addPartToBoard(`HPL_CARA_${color}`, `PLANCHA HPL - COLOR: ${getColorName(color)}`, color, 3050, 1300, {

@@ -419,6 +419,13 @@ export function Closet() {
     const modDoorProps = getTextureProps(mod.overrides?.doorColor || doorColor, mod.overrides?.doorMaterial || state.doorMaterial);
     const modDrawerFrontProps = getTextureProps(mod.overrides?.drawerFrontColor || state.drawerFrontColor, mod.overrides?.drawerFrontMaterial || state.drawerFrontMaterial);
     const modDrawerInnerProps = getTextureProps(mod.overrides?.drawerInnerColor || state.drawerInnerColor, mod.overrides?.drawerInnerMaterial || state.drawerInnerMaterial);
+    const isInnerWhite = ((c?: string) => {
+      if (!c) return true;
+      const lower = c.toLowerCase().trim();
+      return lower === '#ffffff' || lower === '#fff' || lower === '#f8fafc' || lower === '#f3f4f6' || lower === '#e5e7eb' || lower === '#dddddd' || lower === 'white' || lower === 'blanco' || lower.includes('blanco') || lower.includes('white');
+    })(mod.overrides?.drawerInnerColor || state.drawerInnerColor);
+    const drawerBotThick = isInnerWhite ? 0.3 : thickness;
+    const drawerBotProps = isInnerWhite ? { color: '#dddddd' } : modDrawerInnerProps;
     const modBackProps = getTextureProps(mod.overrides?.backColor || backColor, mod.overrides?.backMaterial || state.structureMaterial);
     const modSocleProps = getTextureProps(mod.overrides?.socleColor || socleColor, mod.overrides?.socleMaterial || (state.socleMaterial as 'melamina' | 'hpl'));
     const modGrainDirection = mod.overrides?.grainDirection || 'vertical';
@@ -739,7 +746,7 @@ export function Closet() {
           <Board key={`drawer-F-${mod.id}-${d}`} position={[innerCenterX, yBoxCenter, boxZCenter + drawerBoxLength/2 - thickness/2]} args={[boxOuterWidth - thickness*2, sideHeight, thickness]} {...modDrawerInnerProps} />
         );
         drawerElements.push(
-          <Board key={`drawer-Bot-${mod.id}-${d}`} position={[innerCenterX, yBoxBase + 0.3, boxZCenter]} args={[boxOuterWidth - thickness*2, 0.3, drawerBoxLength - thickness*2]} color="#dddddd" />
+          <Board key={`drawer-Bot-${mod.id}-${d}`} position={[innerCenterX, yBoxBase + drawerBotThick / 2, boxZCenter]} args={[boxOuterWidth - thickness*2, drawerBotThick, drawerBoxLength - thickness*2]} {...drawerBotProps} />
         );
         
         // Add drawer assembly joints (Front/Back walls to Side walls)

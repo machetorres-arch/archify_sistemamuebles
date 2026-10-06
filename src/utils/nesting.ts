@@ -111,6 +111,14 @@ export function optimizeNesting(
 
   if (baseItems.length === 0) return [];
 
+  // Ordenar piezas de mayor a menor área para empaquetado First Fit / Best Fit Decreasing óptimo
+  baseItems.sort((a, b) => {
+    const areaA = a.w * a.h;
+    const areaB = b.w * b.h;
+    if (areaB !== areaA) return areaB - areaA;
+    return Math.max(b.w, b.h) - Math.max(a.w, a.h);
+  });
+
   const usableW = boardW - 2 * margin;
   const usableH = boardH - 2 * margin;
 

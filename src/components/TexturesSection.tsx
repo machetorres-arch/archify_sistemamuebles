@@ -25,13 +25,21 @@ export const TexturesSection = ({
   const [thicknessFilter, setThicknessFilter] = useState<'all' | 15 | 18>('all');
   const hasIslands = useKitchenStore((s) => s.cabinets?.some((c) => c.type === 'island'));
 
-  const applyTexture = (url: string, name: string) => {
+  const applyTexture = (url: string, name: string, texObj?: any) => {
     const currentTargetPart = useStore.getState().targetPart;
     const nameLower = name.toLowerCase();
-    const urlLower = url.toLowerCase();
+    const urlLower = (url || '').toLowerCase();
     
-    // Auto-detectar material por el nombre del archivo/textura
-    const isHPL = nameLower.includes('abet') || nameLower.includes('hpl') || nameLower.includes('laminati') || urlLower.includes('abet') || urlLower.includes('fiore') || urlLower.includes('broccato');
+    // Auto-detectar material por categoría de Backoffice, marca o nombre del archivo/textura
+    const isHPL = 
+      texObj?.category === 'hpl_autor' ||
+      (texObj && isAbetItem(texObj)) ||
+      nameLower.includes('abet') ||
+      nameLower.includes('hpl') ||
+      nameLower.includes('laminati') ||
+      urlLower.includes('abet') ||
+      urlLower.includes('fiore') ||
+      urlLower.includes('broccato');
     const mat: 'melamina' | 'hpl' = isHPL ? 'hpl' : 'melamina';
     
     if (onSelectTexture) {
@@ -130,7 +138,7 @@ export const TexturesSection = ({
       <div key={tex.id} className="relative group">
         <button 
           onClick={() => {
-            applyTexture(tex.url, tex.name);
+            applyTexture(tex.url, tex.name, tex);
             // Solo ajustar espesor global de la estructura si se está configurando la estructura o todo el mueble,
             // y solo para tableros autoportantes (>= 12 mm). Nunca para láminas HPL (0.8/0.9 mm) ni al cambiar solo puertas.
             if (
@@ -335,6 +343,53 @@ export const TexturesSection = ({
                 }`}
               >
                 <span>Mismo HPL 2 Caras</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Sustrato de Base HPL: MDF Desnudo 15mm / 18mm (Formato 2440 × 1520 mm) */}
+          <div className={`mt-2 p-2.5 rounded-xl border flex flex-col gap-1.5 ${
+            isLight ? 'bg-orange-50/80 border-orange-200' : 'bg-black/30 border-orange-500/25'
+          }`}>
+            <div className="flex items-center justify-between">
+              <span className={`text-[10px] uppercase font-bold tracking-wider ${
+                isLight ? 'text-orange-950' : 'text-orange-400'
+              }`}>
+                Sustrato Base MDF Desnudo
+              </span>
+              <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-zinc-700/50 text-zinc-300 border border-zinc-600/40">
+                2440 × 1520 mm
+              </span>
+            </div>
+            <p className={`text-[10px] leading-tight ${isLight ? 'text-slate-600' : 'text-zinc-400'}`}>
+              Tablero MDF crudo donde se prensa el laminado HPL (formato único 2440 × 1520 mm).
+            </p>
+            <div className="grid grid-cols-2 gap-1.5 mt-0.5">
+              <button
+                type="button"
+                onClick={() => state.setHplSubstrateThickness(15)}
+                className={`py-1.5 px-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                  (state.hplSubstrateThickness || 15) === 15
+                    ? 'bg-orange-500 text-black shadow-xs font-extrabold'
+                    : isLight
+                      ? 'bg-white text-slate-700 border border-slate-300 hover:border-orange-400'
+                      : 'bg-white/5 text-zinc-300 border border-white/10 hover:border-orange-500/50'
+                }`}
+              >
+                <span>MDF Desnudo 15 mm</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => state.setHplSubstrateThickness(18)}
+                className={`py-1.5 px-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                  state.hplSubstrateThickness === 18
+                    ? 'bg-orange-500 text-black shadow-xs font-extrabold'
+                    : isLight
+                      ? 'bg-white text-slate-700 border border-slate-300 hover:border-orange-400'
+                      : 'bg-white/5 text-zinc-300 border border-white/10 hover:border-orange-500/50'
+                }`}
+              >
+                <span>MDF Desnudo 18 mm</span>
               </button>
             </div>
           </div>

@@ -1,6 +1,22 @@
+import { useAdminStore } from '../store/adminStore';
+
 export function getFriendlyColorName(colorVal?: string, customTextures?: any[]): string {
   if (!colorVal) return 'Blanco Estándar';
   
+  // 1. Buscar primero en texturas del Backoffice / CustomTextures
+  const adminTextures = useAdminStore.getState?.()?.textures || [];
+  const allCustom = [...(customTextures || []), ...adminTextures];
+
+  const foundInCustom = allCustom.find(
+    (t: any) => t && (t.url === colorVal || t.id === colorVal || t.previewUrl === colorVal)
+  );
+  if (foundInCustom?.name) {
+    const brandPrefix = foundInCustom.brand && !foundInCustom.name.toLowerCase().includes(foundInCustom.brand.toLowerCase())
+      ? `${foundInCustom.brand} `
+      : '';
+    return `${brandPrefix}${foundInCustom.name}`;
+  }
+
   // Base64 or long data URIs
   if (colorVal.startsWith('data:')) {
     return 'Textura Personalizada (Cargada)';
@@ -29,11 +45,6 @@ export function getFriendlyColorName(colorVal?: string, customTextures?: any[]):
   const upper = colorVal.toUpperCase();
   if (hexMap[upper]) return hexMap[upper];
   if (colorVal.startsWith('#')) return `Color ${colorVal}`;
-
-  if (customTextures && Array.isArray(customTextures)) {
-    const found = customTextures.find((t: any) => t.url === colorVal);
-    if (found?.name) return found.name;
-  }
 
   const parts = colorVal.split('/');
   const last = parts[parts.length - 1].replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');

@@ -1,12 +1,14 @@
 import { CabinetType } from '../store/kitchenStore';
 import { useStore } from '../store';
 import { useKitchenStore } from '../store/kitchenStore';
+import { useAdminStore } from '../store/adminStore';
 import { Part, generateEdgeBandingList } from './manufacturing';
 import { calculateSocleSystem } from './kitchenSocle';
 import { calculateGolaSystem } from './kitchenGola';
 import { HANDLE_CATALOG, FINISH_LABELS } from '../types/handle';
 import { generateCountertopPieces } from './countertopNesting';
 import { optimizeNesting, groupIdenticalBoardPatterns, NestingPart, BoardResult } from './nesting';
+import { getFriendlyColorName } from './colorNames';
 
 // Parámetros técnicos de herrajes según marca (igualados con el configurador de closets)
 export const HARDWARE_SPECS = {
@@ -40,12 +42,39 @@ export function getNominalSlideLength(innerDepthMm: number): number {
 }
 
 /**
- * Determina si una pieza, textura o módulo corresponde a Laminado de Alta Presión HPL (Abet Laminati u otros)
+ * Determina si una pieza, textura o material corresponde a Laminado de Alta Presión HPL (Abet Laminati u otros)
  */
-export function isHplFinish(materialUrlOrColor?: string, doorMaterial?: string, cab?: CabinetType): boolean {
+export function isHplFinish(materialUrlOrColor?: string, specificMaterial?: string, cab?: Partial<CabinetType>): boolean {
+  // 1. Si el material específico de la pieza está explícitamente fijado
+  if (specificMaterial === 'hpl') {
+    return true;
+  }
+  if (specificMaterial === 'melamina' && (!materialUrlOrColor || (!materialUrlOrColor.toLowerCase().includes('abet') && !materialUrlOrColor.toLowerCase().includes('laminati')))) {
+    return false;
+  }
+
+  // 2. Si no hay override explícito a melamina, verificar catálogo del Backoffice / CustomTextures
   if (materialUrlOrColor) {
+    const adminTextures = useAdminStore.getState?.()?.textures || [];
+    const customTextures = useStore.getState?.()?.customTextures || [];
+    const allCustom = [...customTextures, ...adminTextures];
+
+    const foundInCustom = allCustom.find(
+      (t: any) => t && (t.url === materialUrlOrColor || t.id === materialUrlOrColor || t.previewUrl === materialUrlOrColor)
+    );
+
+    if (foundInCustom) {
+      const anyFound = foundInCustom as any;
+      if (anyFound.category === 'hpl_autor') return true;
+      const bLower = (anyFound.brand || '').toLowerCase();
+      const nLower = (anyFound.name || '').toLowerCase();
+      if (bLower.includes('abet') || bLower.includes('laminati') || nLower.includes('abet') || nLower.includes('laminati') || nLower.includes('hpl')) {
+        return true;
+      }
+    }
+
     const s = materialUrlOrColor.toLowerCase();
-    // 1. Detección intrínseca por patrón de textura o nombre HPL de alta presión
+    // Detección intrínseca por patrón de URL o nombre
     if (
       s.includes('abet') ||
       s.includes('laminati') ||
@@ -57,12 +86,11 @@ export function isHplFinish(materialUrlOrColor?: string, doorMaterial?: string, 
     ) {
       return true;
     }
-    // 2. Si es textura de veta de madera estándar o color melamínico, NUNCA es HPL
+
     if (
       s.includes('light-wood-grain') ||
       s.includes('wood-grain') ||
       s.includes('melamina') ||
-      s.startsWith('#') ||
       s.includes('masisa') ||
       s.includes('arauco') ||
       s.includes('frost')
@@ -71,13 +99,28 @@ export function isHplFinish(materialUrlOrColor?: string, doorMaterial?: string, 
     }
   }
 
-  // 3. Si no hay textura intrínseca detectable, evaluar banderas explícitas del material
-  if (doorMaterial === 'melamina') return false;
-  if (doorMaterial === 'hpl') return true;
-  if (cab?.doorMaterial === 'melamina') return false;
-  if (cab?.doorMaterial === 'hpl') return true;
-
   return false;
+}
+
+/**
+ * Determina si el decorativo de la caja de cajón corresponde a blanco (Durolac 3mm disponible en el mercado)
+ * o si es de color/negro/madera (debe fabricarse en la misma melamina de 15/18mm)
+ */
+export function isWhiteDrawerFinish(colorVal?: string): boolean {
+  if (!colorVal) return true;
+  const lower = colorVal.toLowerCase().trim();
+  return (
+    lower === '#ffffff' ||
+    lower === '#fff' ||
+    lower === '#f8fafc' ||
+    lower === '#f3f4f6' ||
+    lower === '#e5e7eb' ||
+    lower === '#dddddd' ||
+    lower === 'white' ||
+    lower === 'blanco' ||
+    lower.includes('blanco') ||
+    lower.includes('white')
+  );
 }
 
 /**
@@ -92,6 +135,7 @@ export function isCabinetWithDoors(cab?: Partial<CabinetType> | null): boolean {
     v === '1_door' ||
     v === '2_doors' ||
     v === 'hospital_meson_1door' ||
+    v === 'hospital_meson_2doors' ||
     v === '1_door_1_drawer' ||
     v === 'tall_1_door' ||
     v === 'tall_2_doors' ||
@@ -153,7 +197,7 @@ export function getSplitCabinetShelvesCounts(cab?: Partial<CabinetType> | null):
 export function getDefaultShelvesCount(cab?: Partial<CabinetType> | null): number {
   if (!cab) return 1;
   const v = cab.variant || ((cab.width ?? 0) > 60 ? '2_doors' : '1_door');
-  if (v === 'hospital_meson_1door') {
+  if (v === 'hospital_niche_open') {
     return 2;
   }
   if (v === 'tall_1_door' || v === 'tall_2_doors' || v === 'tall_split_2_doors') {
@@ -520,20 +564,29 @@ export function generateKitchenPartsList(cabinets: CabinetType[]): Part[] {
     }
 
     // 4. Fondo (Back panel)
+    const isBackHpl = isHplFinish(cab.backColor || state.backColor || state.structureColor, cab.backMaterial || state.structureMaterial);
+    const backThick = thickness * 10;
+    const backMat = cab.backColor || state.backColor || state.structureColor;
+
     parts.push({
-        name: `Fondo Trasera ${cabName}`,
+        name: isBackHpl ? `Fondo Trasera (MDF ${backThick}mm HPL) ${cabName}` : `Fondo Trasera (Melamina ${backThick}mm) ${cabName}`,
         moduleId: cab.id,
         moduleIndex: index,
         qty: 1,
         length: innerW * 10,
         width: innerH * 10,
-        thickness: 3, // Placa MDF 3mm trasera
-        material: cab.backColor || state.structureColor,
-        edgeL1: false, edgeL2: false, edgeW1: false, edgeW2: false,
-        notes: 'Placa de fondo 3mm'
+        thickness: backThick,
+        material: backMat,
+        isHpl: isBackHpl,
+        edgeL1: true, edgeL2: false, edgeW1: false, edgeW2: false,
+        notes: isBackHpl ? `Trasera estructurada en MDF ${backThick}mm laminada en HPL 2 caras` : `Placa de fondo estructurada en melamina ${backThick}mm`
     });
 
     // 5. Repisas (Shelves) y Divisores si corresponde
+    const isCabShelfHpl = isHplFinish(cab.shelfColor || state.shelfColor || cab.structureColor || state.structureColor, cab.shelfMaterial || state.shelfMaterial, cab);
+    const shelfThick = isCabShelfHpl ? (cab.hplSubstrateThickness || state.hplSubstrateThickness || 18) : (thickness * 10);
+    const shelfMat = cab.shelfColor || state.shelfColor || cab.structureColor || state.structureColor;
+
     if (cab.variant === '2_doors' || cab.variant === '1_door' || cab.variant?.startsWith('corner_blind') || cab.variant === 'corner_blind' || ((cab.type === 'wall' || cab.type === 'base' || cab.type === 'island') && (!cab.variant || cab.variant?.includes('door')))) {
         const shelfQty = cab.shelvesCount !== undefined ? cab.shelvesCount : getDefaultShelvesCount(cab);
         if (shelfQty > 0) {
@@ -544,8 +597,9 @@ export function generateKitchenPartsList(cabinets: CabinetType[]): Part[] {
                 qty: shelfQty,
                 length: (innerW - 0.2) * 10,
                 width: (d - 4) * 10,
-                thickness: thickness * 10,
-                material: cab.shelfColor || state.structureColor,
+                thickness: shelfThick,
+                material: shelfMat,
+                isHpl: isCabShelfHpl,
                 edgeL1: true, edgeL2: false, edgeW1: false, edgeW2: false,
                 notes: `${shelfQty} repisa(s) interior(es) regulable(s)`
             });
@@ -560,8 +614,9 @@ export function generateKitchenPartsList(cabinets: CabinetType[]): Part[] {
                 qty: shelfQty,
                 length: (innerW - 0.2) * 10,
                 width: (d - 4) * 10,
-                thickness: thickness * 10,
-                material: cab.shelfColor || state.structureColor,
+                thickness: shelfThick,
+                material: shelfMat,
+                isHpl: isCabShelfHpl,
                 edgeL1: true, edgeL2: false, edgeW1: false, edgeW2: false,
                 notes: `${shelfQty} repisas interiores de despensa alta`
             });
@@ -1086,6 +1141,7 @@ export function generateKitchenPartsList(cabinets: CabinetType[]): Part[] {
         const drawerFrontBackLength = drawerBoxOuterWidth - (2 * thickness * 10);
         const innerDrawerH = 140; // 140 mm
         const cInnerMat = cab.drawerInnerColor || state.structureColor;
+        const isInnerHpl = isHplFinish(cInnerMat, cab.drawerInnerMaterial || cab.structureMaterial || state.structureMaterial, cab);
 
         for (let i = 0; i < 4; i++) {
             // Frente interior con uñero fresado CNC
@@ -1127,18 +1183,19 @@ export function generateKitchenPartsList(cabinets: CabinetType[]): Part[] {
                 edgeL1: true, edgeL2: false, edgeW1: false, edgeW2: false,
                 notes: `P/ ${hwSpec.slideName}`
             });
-            // Fondo de cajón 3mm
+            // Fondo de cajón estructurado en el mismo material/melamina de la caja de cajón (15/18mm)
             parts.push({
-                name: `Fondo Cajón Interior ${i + 1} ${cabName}`,
+                name: isInnerHpl ? `Fondo Cajón Interior ${i + 1} (MDF ${thickness * 10}mm HPL) ${cabName}` : `Fondo Cajón Interior ${i + 1} (Melamina ${thickness * 10}mm) ${cabName}`,
                 moduleId: cab.id,
                 moduleIndex: index,
                 qty: 1,
                 length: drawerBoxLength,
                 width: drawerBoxOuterWidth,
-                thickness: 3,
-                material: cab.backColor || '#dddddd',
-                edgeL1: false, edgeL2: false, edgeW1: false, edgeW2: false,
-                notes: 'Fondo ranurado/clavado 3mm'
+                thickness: thickness * 10,
+                material: cInnerMat,
+                isHpl: isInnerHpl,
+                edgeL1: true, edgeL2: false, edgeW1: false, edgeW2: false,
+                notes: isInnerHpl ? `Fondo estructurado MDF ${thickness * 10}mm laminado HPL 2 caras` : `Fondo estructurado en melamina ${thickness * 10}mm a tono de caja`
             });
         }
 
@@ -1203,6 +1260,7 @@ export function generateKitchenPartsList(cabinets: CabinetType[]): Part[] {
         const drawerBoxOuterWidth = innerW * 10 - hwSpec.slideClearanceTotal;
         const drawerFrontBackLength = drawerBoxOuterWidth - (2 * thickness * 10);
         const cInnerMat = cab.drawerInnerColor || state.structureColor;
+        const isInnerHpl = isHplFinish(cInnerMat, cab.drawerInnerMaterial || cab.structureMaterial || state.structureMaterial, cab);
 
         // Cajón 1: Inferior estándar
         parts.push({
@@ -1227,11 +1285,14 @@ export function generateKitchenPartsList(cabinets: CabinetType[]): Part[] {
             notes: `Testero posterior p/ ${hwSpec.slideName}`
         });
         parts.push({
-            name: `Fondo Cajón Inferior ${cabName}`,
+            name: isInnerHpl ? `Fondo Cajón Inferior (MDF ${thickness * 10}mm HPL) ${cabName}` : `Fondo Cajón Inferior (Melamina ${thickness * 10}mm) ${cabName}`,
             moduleId: cab.id, moduleIndex: index, qty: 1,
-            length: drawerBoxLength, width: drawerBoxOuterWidth, thickness: 3, material: cab.backColor || '#dddddd',
-            edgeL1: false, edgeL2: false, edgeW1: false, edgeW2: false,
-            notes: 'Fondo ranurado/clavado 3mm'
+            length: drawerBoxLength, width: drawerBoxOuterWidth,
+            thickness: thickness * 10,
+            material: cInnerMat,
+            isHpl: isInnerHpl,
+            edgeL1: true, edgeL2: false, edgeW1: false, edgeW2: false,
+            notes: isInnerHpl ? `Fondo estructurado MDF ${thickness * 10}mm laminado HPL 2 caras` : `Fondo estructurado en melamina ${thickness * 10}mm a tono de caja`
         });
 
         // Cajón 2: Superior en U para salvar sifón sanitario
@@ -1271,18 +1332,24 @@ export function generateKitchenPartsList(cabinets: CabinetType[]): Part[] {
             notes: 'Paredes interiores que conforman el calado central del sifón'
         });
         parts.push({
-            name: `Fondo Alas Cajón en U (3mm) ${cabName}`,
+            name: isInnerHpl ? `Fondo Alas Cajón en U (MDF ${thickness * 10}mm HPL) ${cabName}` : `Fondo Alas Cajón en U (Melamina ${thickness * 10}mm) ${cabName}`,
             moduleId: cab.id, moduleIndex: index, qty: 2,
-            length: drawerBoxLength, width: wingW * 10, thickness: 3, material: cab.backColor || '#dddddd',
-            edgeL1: false, edgeL2: false, edgeW1: false, edgeW2: false,
-            notes: 'Fondo de cada ala lateral del cajón en U'
+            length: drawerBoxLength, width: wingW * 10,
+            thickness: thickness * 10,
+            material: cInnerMat,
+            isHpl: isInnerHpl,
+            edgeL1: true, edgeL2: false, edgeW1: false, edgeW2: false,
+            notes: isInnerHpl ? `Fondo ala en MDF ${thickness * 10}mm HPL` : `Fondo ala en melamina ${thickness * 10}mm a tono de caja`
         });
         parts.push({
-            name: `Fondo Banda Frontal Cajón en U (3mm) ${cabName}`,
+            name: isInnerHpl ? `Fondo Banda Frontal Cajón en U (MDF ${thickness * 10}mm HPL) ${cabName}` : `Fondo Banda Frontal Cajón en U (Melamina ${thickness * 10}mm) ${cabName}`,
             moduleId: cab.id, moduleIndex: index, qty: 1,
-            length: frontBandLength * 10, width: uCutoutW * 10, thickness: 3, material: cab.backColor || '#dddddd',
-            edgeL1: false, edgeL2: false, edgeW1: false, edgeW2: false,
-            notes: 'Fondo de la unión frontal central del cajón en U'
+            length: frontBandLength * 10, width: uCutoutW * 10,
+            thickness: thickness * 10,
+            material: cInnerMat,
+            isHpl: isInnerHpl,
+            edgeL1: true, edgeL2: false, edgeW1: false, edgeW2: false,
+            notes: isInnerHpl ? `Fondo unión frontal en MDF ${thickness * 10}mm HPL` : `Fondo unión frontal en melamina ${thickness * 10}mm a tono de caja`
         });
     } else if (cab.variant === 'spice_rack') {
         const isGola = (kState.golaSystem === 'aluminum' || kState.golaSystem === 'black') && (cab.type === 'base' || cab.type === 'island');
@@ -1733,8 +1800,9 @@ export function generateKitchenPartsList(cabinets: CabinetType[]): Part[] {
                     qty: shelfQty,
                     length: (innerW - 0.2) * 10,
                     width: (d - 4) * 10,
-                    thickness: thickness * 10,
-                    material: cab.shelfColor || state.structureColor,
+                    thickness: shelfThick,
+                    material: shelfMat,
+                    isHpl: isCabShelfHpl,
                     edgeL1: true, edgeL2: false, edgeW1: false, edgeW2: false,
                     notes: `${shelfQty} repisa(s) regulable(s) bajo cajón`
                 });
@@ -1747,7 +1815,8 @@ export function generateKitchenPartsList(cabinets: CabinetType[]): Part[] {
         const drawerBoxLength = nominalLength - hwSpec.drawerLengthDeduction;
         const drawerBoxOuterWidth = innerW * 10 - hwSpec.slideClearanceTotal;
         const drawerFrontBackLength = drawerBoxOuterWidth - (2 * thickness * 10);
-        const cInnerMat = cab.drawerInnerColor || state.structureColor;
+        const cInnerMat = cab.drawerInnerColor || state.drawerInnerColor || cab.structureColor || state.structureColor;
+        const isInnerHpl = isHplFinish(cInnerMat, cab.drawerInnerMaterial || cab.structureMaterial || state.structureMaterial, cab);
 
         for (let i=0; i<drawCount; i++) {
             const currentSideH = cab.variant === '2_drawers_1_pot' 
@@ -1758,6 +1827,7 @@ export function generateKitchenPartsList(cabinets: CabinetType[]): Part[] {
                 name: `Lateral Cajón ${cabName} (${i+1})`,
                 moduleId: cab.id, moduleIndex: index, qty: 2,
                 length: drawerBoxLength, width: currentSideH, thickness: thickness * 10, material: cInnerMat,
+                isHpl: isInnerHpl,
                 edgeL1: true, edgeL2: false, edgeW1: false, edgeW2: false,
                 notes: `P/ ${hwSpec.slideName} (NL=${nominalLength}mm)`
             });
@@ -1766,6 +1836,7 @@ export function generateKitchenPartsList(cabinets: CabinetType[]): Part[] {
                 name: `Contrafrente Cajón ${cabName} (${i+1})`,
                 moduleId: cab.id, moduleIndex: index, qty: 1,
                 length: drawerFrontBackLength, width: currentSideH, thickness: thickness * 10, material: cInnerMat,
+                isHpl: isInnerHpl,
                 edgeL1: true, edgeL2: false, edgeW1: false, edgeW2: false,
                 notes: `Testero frontal interior p/ fijación de frente exterior`
             });
@@ -1774,16 +1845,20 @@ export function generateKitchenPartsList(cabinets: CabinetType[]): Part[] {
                 name: `Trasera Cajón ${cabName} (${i+1})`,
                 moduleId: cab.id, moduleIndex: index, qty: 1,
                 length: drawerFrontBackLength, width: currentSideH, thickness: thickness * 10, material: cInnerMat,
+                isHpl: isInnerHpl,
                 edgeL1: true, edgeL2: false, edgeW1: false, edgeW2: false,
                 notes: `Testero posterior p/ ${hwSpec.slideName}`
             });
-            // Fondo de cajón (3mm)
+            // Fondo de cajón estructurado en el mismo material/melamina de la caja (15/18mm)
             parts.push({
-                name: `Fondo Cajón ${cabName} (${i+1})`,
+                name: isInnerHpl ? `Fondo Cajón (MDF ${thickness * 10}mm HPL) ${cabName} (${i+1})` : `Fondo Cajón (Melamina ${thickness * 10}mm) ${cabName} (${i+1})`,
                 moduleId: cab.id, moduleIndex: index, qty: 1,
-                length: drawerBoxLength, width: drawerBoxOuterWidth, thickness: 3, material: cab.backColor || '#dddddd',
-                edgeL1: false, edgeL2: false, edgeW1: false, edgeW2: false,
-                notes: 'Fondo ranurado/clavado 3mm'
+                length: drawerBoxLength, width: drawerBoxOuterWidth,
+                thickness: thickness * 10,
+                material: cInnerMat,
+                isHpl: isInnerHpl,
+                edgeL1: true, edgeL2: false, edgeW1: false, edgeW2: false,
+                notes: isInnerHpl ? `Fondo estructurado MDF ${thickness * 10}mm laminado HPL 2 caras` : `Fondo estructurado en melamina ${thickness * 10}mm a tono de caja`
             });
         }
     } else if (cab.variant === 'hospital_meson_1door') {
@@ -1801,33 +1876,40 @@ export function generateKitchenPartsList(cabinets: CabinetType[]): Part[] {
             edgeL1: true, edgeL2: true, edgeW1: true, edgeW2: true,
             notes: 'Puerta batiente clínica de 1 hoja con perfil tirador KUTZ 12/18 y bisagras con freno'
         });
-        // 2 repisas interiores de MDF 18mm laminado 2 caras
+    } else if (cab.variant === 'hospital_meson_2doors') {
+        const isGola = (kState.golaSystem === 'aluminum' || kState.golaSystem === 'black') && (cab.type === 'base' || cab.type === 'island');
+        const rawDoorH = isGola ? (cabH - 3.5 - gap * 2) : (cabH - gap * 2);
+        const doorWidth = ((w - gap * 3) / 2) * 10;
         parts.push({
-            name: `Repisa Interior Clínica ${cabName}`,
+            name: `Puerta Frontal Clínica (KUTZ) ${cabName}`,
             moduleId: cab.id,
             moduleIndex: index,
             qty: 2,
-            length: (innerW - 0.2) * 10,
-            width: (d - 4) * 10,
+            length: rawDoorH * 10,
+            width: doorWidth,
             thickness: thickness * 10,
-            material: cab.shelfColor || state.structureColor,
-            edgeL1: true, edgeL2: false, edgeW1: false, edgeW2: false,
-            notes: '2 repisas interiores MDF 18mm laminado blanco 2 caras (Norma MC.2.02)'
+            material: frontMat,
+            edgeL1: true, edgeL2: true, edgeW1: true, edgeW2: true,
+            notes: 'Puertas batientes clínicas de 2 hojas simétricas con perfil tirador KUTZ 12/18 y bisagras con freno'
         });
     } else if (cab.variant === 'hospital_niche_open') {
-        // Nicho abierto sin puerta, con 2 repisas vistas
-        parts.push({
-            name: `Repisa Nicho Clínico ${cabName}`,
-            moduleId: cab.id,
-            moduleIndex: index,
-            qty: 2,
-            length: (innerW - 0.2) * 10,
-            width: (d - 2) * 10,
-            thickness: thickness * 10,
-            material: cab.shelfColor || state.structureColor,
-            edgeL1: true, edgeL2: false, edgeW1: false, edgeW2: false,
-            notes: '2 repisas vistas interiores para instrumental / dispensadores clínicos'
-        });
+        // Nicho abierto sin puerta, con repisas configurables (0 a 4)
+        const shelfQty = cab.shelvesCount !== undefined ? cab.shelvesCount : 2;
+        if (shelfQty > 0) {
+          parts.push({
+              name: `Repisa Nicho Clínico ${cabName}`,
+              moduleId: cab.id,
+              moduleIndex: index,
+              qty: shelfQty,
+              length: (innerW - 0.2) * 10,
+              width: (d - 2) * 10,
+              thickness: shelfThick,
+              material: shelfMat,
+              isHpl: isCabShelfHpl,
+              edgeL1: true, edgeL2: false, edgeW1: false, edgeW2: false,
+              notes: `${shelfQty} repisa${shelfQty > 1 ? 's' : ''} vista${shelfQty > 1 ? 's' : ''} interior${shelfQty > 1 ? 'es' : ''} para instrumental / dispensadores clínicos`
+          });
+        }
     } else if (cab.variant !== 'wall_open' && cab.variant !== 'tall_open' && cab.variant !== 'open' && !cab.variant?.includes('wine_rack') && !cab.variant?.startsWith('wall_corner_blind') && cab.variant !== 'hospital_niche_open') {
         // Fallback estándar para puertas batientes en cualquier variante base, mural o torre
         const isGola = (kState.golaSystem === 'aluminum' || kState.golaSystem === 'black') && (cab.type === 'base' || cab.type === 'island');
@@ -1858,22 +1940,33 @@ export function generateKitchenPartsList(cabinets: CabinetType[]): Part[] {
                     !p.name.toLowerCase().includes('caja');
     const isBack = p.thickness === 3 || p.thickness === 3.5 || p.name.includes('Fondo') || p.name.includes('Trasera');
     const isCover = p.name.includes('Tapa Lateral') || p.name.includes('Costado Decorativo');
+    const isShelf = p.name.includes('Repisa') || p.name.includes('Divisor');
 
     if (isFront) {
       p.materialCategory = 'doors';
       const isDrawerFront = p.name.includes('Frente Cajón');
-      const specificMat = isDrawerFront ? (cab?.drawerFrontMaterial || 'melamina') : (cab?.doorMaterial);
-      p.isHpl = isHplFinish(p.material, specificMat, isDrawerFront ? undefined : cab);
+      const specificMat = isDrawerFront ? (cab?.drawerFrontMaterial || state.drawerFrontMaterial) : (cab?.doorMaterial || state.doorMaterial);
+      p.isHpl = isHplFinish(p.material, specificMat, cab);
     } else if (isCover) {
       p.materialCategory = 'cover';
-      const coverMatType = (p.name.includes('Izq') ? cab?.leftCoverPanel?.material : cab?.rightCoverPanel?.material) || cab?.doorMaterial;
+      const coverMatType = (p.name.includes('Izq') ? cab?.leftCoverPanel?.material : cab?.rightCoverPanel?.material) || cab?.doorMaterial || state.doorMaterial;
       p.isHpl = isHplFinish(p.material, coverMatType, cab);
+    } else if (isShelf) {
+      p.materialCategory = 'structure';
+      const shelfMatType = cab?.shelfMaterial || state.shelfMaterial;
+      p.isHpl = p.isHpl !== undefined ? p.isHpl : isHplFinish(p.material, shelfMatType, cab);
+      if (p.isHpl) {
+        p.thickness = cab?.hplSubstrateThickness || state.hplSubstrateThickness || 18;
+      }
     } else if (isBack) {
       p.materialCategory = 'backs';
-      p.isHpl = false;
+      p.isHpl = p.isHpl || isHplFinish(p.material, cab?.backMaterial || state.structureMaterial, cab);
     } else {
       p.materialCategory = 'structure';
-      p.isHpl = false;
+      p.isHpl = isHplFinish(p.material, cab?.structureMaterial || state.structureMaterial, cab);
+      if (p.isHpl) {
+        p.thickness = cab?.hplSubstrateThickness || state.hplSubstrateThickness || 18;
+      }
     }
   });
 
@@ -1911,20 +2004,7 @@ export function generateKitchenHardwareList(cabinets: CabinetType[]) {
 
     const DEFAULT_NAMES = DEFAULT_MELAMINE_NAMES;
 
-    const getColorName = (colorVal?: string) => {
-      if (!colorVal) return 'Melamina Blanca';
-      if (colorVal.startsWith('data:')) {
-        const found = state.customTextures?.find((t: any) => t.url === colorVal);
-        return found?.name || 'Textura Personalizada';
-      }
-      if (colorVal.startsWith('#')) {
-        return DEFAULT_NAMES[colorVal.toUpperCase()] || `Color ${colorVal}`;
-      }
-      const found = state.customTextures?.find((t: any) => t.url === colorVal);
-      if (found) return found.name;
-      const parts = colorVal.split('/');
-      return parts[parts.length - 1].replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
-    };
+    const getColorName = (colorVal?: string) => getFriendlyColorName(colorVal, state.customTextures);
 
     // 0. CÁLCULO DE TABLEROS Y PLANCHAS (Melaminas, MDF 3mm, Laminados HPL)
     const allParts = generateKitchenPartsList(cabinets);
@@ -1932,9 +2012,8 @@ export function generateKitchenHardwareList(cabinets: CabinetType[]) {
     const m2PorPlacaHPL = 3.05 * 1.30; // 3.965 m²
 
     // Agrupación por material / decorativo para cálculo multidecorativo exacto
-    const melDoorsByColor: Record<string, { m2: number; name: string }> = {};
+    const melBoardsByColor: Record<string, { m2Doors: number; m2Struct: number; name: string }> = {};
     const hplDoorsByColor: Record<string, { m2Hpl: number; m2Mdf: number; name: string }> = {};
-    const structByColor: Record<string, { m2: number; name: string }> = {};
     let backsM2 = 0;
     
     // Tapacantos agrupados por material / decorativo
@@ -1947,33 +2026,31 @@ export function generateKitchenHardwareList(cabinets: CabinetType[]) {
                       !p.name.toLowerCase().includes('contrafrente') &&
                       !p.name.toLowerCase().includes('amarre') &&
                       !p.name.toLowerCase().includes('caja');
-      const isBack = p.thickness === 3 || p.name.includes('Fondo') || p.name.includes('Trasera');
-      const isHPL = p.isHpl !== undefined ? p.isHpl : (isFront && isHplFinish(p.material, undefined, cabinets.find(c => c.id === p.moduleId)));
+      const isHPL = p.isHpl !== undefined ? p.isHpl : isHplFinish(p.material, undefined, cabinets.find(c => c.id === p.moduleId));
+      const isBack = !isHPL && p.thickness <= 4 && (p.thickness === 3 || p.thickness === 3.5 || p.name.includes('Durolac'));
       const colorVal = p.material || (isFront ? state.doorColor : state.structureColor);
       const colorName = getColorName(colorVal);
 
-      if (isBack) {
+      if (isHPL) {
+        // Norma de fabricación: 2 caras de laminado HPL (0.9mm) cortadas con +1 cm (10mm) de sobremedida para prensado y refilado
+        const hplPieceArea = (((p.length + 10) * (p.width + 10)) * (p.qty * 2)) / 1000000;
+        if (!hplDoorsByColor[colorVal]) {
+          hplDoorsByColor[colorVal] = { m2Hpl: 0, m2Mdf: 0, name: colorName };
+        }
+        hplDoorsByColor[colorVal].m2Hpl += hplPieceArea;
+        hplDoorsByColor[colorVal].m2Mdf += pArea;
+      } else if (isBack) {
         backsM2 += pArea;
       } else if (isFront) {
-        if (isHPL) {
-          // Norma de fabricación: el laminado HPL se corta 1 cm (10mm) más ancho y más largo para prensado y refilado
-          const hplPieceArea = (((p.length + 10) * (p.width + 10)) * p.qty) / 1000000;
-          if (!hplDoorsByColor[colorVal]) {
-            hplDoorsByColor[colorVal] = { m2Hpl: 0, m2Mdf: 0, name: colorName };
-          }
-          hplDoorsByColor[colorVal].m2Hpl += hplPieceArea;
-          hplDoorsByColor[colorVal].m2Mdf += pArea;
-        } else {
-          if (!melDoorsByColor[colorVal]) {
-            melDoorsByColor[colorVal] = { m2: 0, name: colorName };
-          }
-          melDoorsByColor[colorVal].m2 += pArea;
+        if (!melBoardsByColor[colorVal]) {
+          melBoardsByColor[colorVal] = { m2Doors: 0, m2Struct: 0, name: colorName };
         }
+        melBoardsByColor[colorVal].m2Doors += pArea;
       } else {
-        if (!structByColor[colorVal]) {
-          structByColor[colorVal] = { m2: 0, name: colorName };
+        if (!melBoardsByColor[colorVal]) {
+          melBoardsByColor[colorVal] = { m2Doors: 0, m2Struct: 0, name: colorName };
         }
-        structByColor[colorVal].m2 += pArea;
+        melBoardsByColor[colorVal].m2Struct += pArea;
       }
 
       // Tapacantos
@@ -1995,17 +2072,31 @@ export function generateKitchenHardwareList(cabinets: CabinetType[]) {
       }
     });
 
-    // 0.1 Tableros de Puertas / Frentes Melamina Estándar (por decorativo)
-    Object.values(melDoorsByColor).forEach(item => {
-      if (item.m2 > 0) {
-        const requiredDoorsBoards = Math.max(1, Math.ceil((item.m2 * 1.18) / m2PorPlacaMDF));
-        const eff = ((item.m2 / (requiredDoorsBoards * m2PorPlacaMDF)) * 100).toFixed(1);
+    // 0.1 Tableros de Melamina Estándar (consolidados por decorativo)
+    Object.values(melBoardsByColor).forEach(item => {
+      const totalM2 = item.m2Doors + item.m2Struct;
+      if (totalM2 > 0) {
+        const requiredBoards = Math.max(1, Math.ceil((totalM2 * 1.15) / m2PorPlacaMDF));
+        const eff = ((totalM2 / (requiredBoards * m2PorPlacaMDF)) * 100).toFixed(1);
+        let itemTitle = `Plancha Melamina (${item.name})`;
+        let detailType = `Área neta: ${totalM2.toFixed(2)} m²`;
+        if (item.m2Doors > 0 && item.m2Struct > 0) {
+          itemTitle = `Plancha Melamina Puertas y Estructura (${item.name})`;
+          detailType = `Puertas: ${item.m2Doors.toFixed(2)} m² | Estructura: ${item.m2Struct.toFixed(2)} m² | Total: ${totalM2.toFixed(2)} m²`;
+        } else if (item.m2Doors > 0) {
+          itemTitle = `Plancha Melamina Puertas y Frentes (${item.name})`;
+          detailType = `Puertas y frentes: ${item.m2Doors.toFixed(2)} m²`;
+        } else {
+          itemTitle = `Plancha Melamina Estructura y Cajones (${item.name})`;
+          detailType = `Estructura y cajones: ${item.m2Struct.toFixed(2)} m²`;
+        }
+
         hardware.push({
           Categoria: 'Tableros',
-          Item: `Plancha Melamina Puertas y Frentes (${item.name})`,
-          Cantidad: requiredDoorsBoards,
+          Item: itemTitle,
+          Cantidad: requiredBoards,
           Unidad: `Planchas (2440x1830x${thicknessMm}mm)`,
-          Detalles: `Área neta: ${item.m2.toFixed(2)} m² | Aprovechamiento est.: ${eff}%`
+          Detalles: `${detailType} | Aprovechamiento est.: ${eff}%`
         });
       }
     });
@@ -2018,10 +2109,10 @@ export function generateKitchenHardwareList(cabinets: CabinetType[]) {
         const effHpl = ((item.m2Hpl / (reqHpl * m2PorPlacaHPL)) * 100).toFixed(1);
         hardware.push({
           Categoria: 'Tableros',
-          Item: `Plancha Laminado HPL Puertas (${item.name})`,
+          Item: `Plancha Laminado HPL (${item.name})`,
           Cantidad: reqHpl,
           Unidad: 'Planchas (3050x1300x0.9mm)',
-          Detalles: `Enchape HPL (+1cm sobremedida refilado). Área corte: ${item.m2Hpl.toFixed(2)} m² | Efic.: ${effHpl}%`
+          Detalles: `Laminado HPL 2 caras (+1cm sobremedida refilado). Área corte: ${item.m2Hpl.toFixed(2)} m² | Efic.: ${effHpl}%`
         });
         totalMdfSustratoM2 += item.m2Mdf;
       }
@@ -2047,22 +2138,7 @@ export function generateKitchenHardwareList(cabinets: CabinetType[]) {
       });
     }
 
-    // 0.3 Tableros de Estructura y Cajas de Cajón (por decorativo)
-    Object.values(structByColor).forEach(item => {
-      if (item.m2 > 0) {
-        const requiredStructBoards = Math.max(1, Math.ceil((item.m2 * 1.15) / m2PorPlacaMDF));
-        const effStruct = ((item.m2 / (requiredStructBoards * m2PorPlacaMDF)) * 100).toFixed(1);
-        hardware.push({
-          Categoria: 'Tableros',
-          Item: `Plancha Melamina Estructura y Cajones (${item.name})`,
-          Cantidad: requiredStructBoards,
-          Unidad: `Planchas (2440x1830x${thicknessMm}mm)`,
-          Detalles: `Área neta: ${item.m2.toFixed(2)} m² | Aprovechamiento est.: ${effStruct}%`
-        });
-      }
-    });
-
-    // 0.4 Tableros MDF 3mm (Fondos y Traseras)
+    // 0.3 Tableros MDF 3mm (Fondos y Traseras)
     if (backsM2 > 0) {
       const requiredBackBoards = Math.max(1, Math.ceil((backsM2 * 1.12) / m2PorPlacaMDF));
       const effBack = ((backsM2 / (requiredBackBoards * m2PorPlacaMDF)) * 100).toFixed(1);
@@ -2243,6 +2319,8 @@ export function generateKitchenHardwareList(cabinets: CabinetType[]) {
             totalHinges += 2;
         } else if (cab.variant === 'hospital_meson_1door') {
             totalHinges += 3; // 3 bisagras 90° de alto tráfico con amortiguador para puerta clínica de 90cm
+        } else if (cab.variant === 'hospital_meson_2doors') {
+            totalHinges += 4; // 2 bisagras por hoja = 4 bisagras totales
         } else if (cab.variant === '2_doors') {
             totalHinges += 4;
         } else if (cab.variant === 'wall_lift_up') {
@@ -2747,6 +2825,9 @@ export function generateKitchenHardwareList(cabinets: CabinetType[]) {
         if (v === 'hospital_meson_1door') {
             return 1;
         }
+        if (v === 'hospital_meson_2doors') {
+            return 2;
+        }
         if (v === '1_door' || v === 'spice_rack' || v === 'sink_1_door' || v === 'wall_1_door' || v === 'tall_1_door' || v === 'wall_lift_up' || v === 'wall_microwave_niche' || v === 'corner_l' || v === 'wall_corner_l' || v?.startsWith('corner_blind') || v === 'corner_blind' || v?.startsWith('wall_corner_blind')) {
             return 1;
         }
@@ -2776,7 +2857,7 @@ export function generateKitchenHardwareList(cabinets: CabinetType[]) {
         if (v === '2_drawers' || v === '2_pot_drawers' || v === 'sink_2_drawers_u') {
             return [singleW, singleW];
         }
-        if (v === '2_doors' || v === 'wall_2_doors' || v === 'tall_2_doors' || v === 'sink_2_doors') {
+        if (v === '2_doors' || v === 'hospital_meson_2doors' || v === 'wall_2_doors' || v === 'tall_2_doors' || v === 'sink_2_doors') {
             return [doubleDoorW, doubleDoorW];
         }
         if (v === 'tall_split_2_doors' || v === 'tall_oven_micro' || v === 'tall_oven_vent' || v === 'tall_microwave_niche' || v === '1_door_1_drawer') {
@@ -2922,30 +3003,19 @@ export function calculateKitchenBoardNesting(
     w: number;
     h: number;
     parts: NestingPart[];
+    hasDoors?: boolean;
+    hasStruct?: boolean;
   }> = {};
 
-  const getColorName = (colorVal?: string) => {
-    if (!colorVal) return 'Melamina Blanca';
-    if (colorVal.startsWith('data:')) {
-      const found = customTextures?.find((t: any) => t.url === colorVal);
-      return found?.name || 'Textura Personalizada';
-    }
-    if (colorVal.startsWith('#')) {
-      return DEFAULT_MELAMINE_NAMES[colorVal.toUpperCase()] || `Color ${colorVal}`;
-    }
-    const found = customTextures?.find((t: any) => t.url === colorVal);
-    if (found) return found.name;
-    const parts = colorVal.split('/');
-    return parts[parts.length - 1].replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
-  };
+  const getColorName = (colorVal?: string) => getFriendlyColorName(colorVal, customTextures);
 
   allParts.forEach((p, pIdx) => {
     const isFront = (p.name.includes('Puerta') || p.name.includes('Frente') || p.name.includes('Panel Ciego')) &&
                     !p.name.toLowerCase().includes('contrafrente') &&
                     !p.name.toLowerCase().includes('amarre') &&
                     !p.name.toLowerCase().includes('caja');
-    const isBack = p.thickness === 3 || p.thickness === 3.5 || p.material === 'Melamina Fondo' || (p.name.includes('Fondo') && !p.name.includes('Soporte')) || (p.name.includes('Trasera') && !p.name.includes('Barra') && !p.name.includes('Caja Cajón'));
-    const isHPL = isFront && (p.isHpl !== undefined ? p.isHpl : isHplFinish(p.material, undefined, cabinets.find(c => c.id === p.moduleId)));
+    const isBack = p.thickness <= 4 && (p.thickness === 3 || p.thickness === 3.5 || p.material === 'Melamina Fondo' || (p.name.includes('Fondo') && !p.name.includes('Soporte')) || (p.name.includes('Trasera') && !p.name.includes('Barra') && !p.name.includes('Caja Cajón')));
+    const isHPL = p.isHpl !== undefined ? p.isHpl : isHplFinish(p.material, undefined, cabinets.find(c => c.id === p.moduleId));
     const partQty = p.qty * multiplier;
 
     let groupKey = '';
@@ -2961,23 +3031,17 @@ export function calculateKitchenBoardNesting(
       label = `PLANCHA DUROLAC / MDF 3MM (FONDOS Y TRASERAS) - COLOR: ${matName}${multiplier > 1 ? ` [LOTE ${multiplier} UN]` : ''}`;
       materialCategory = 'backs';
       thick = 3;
-    } else if (isFront) {
-      if (isHPL) {
-        groupKey = `HPL_DOORS_${p.material || 'abet'}`;
-        label = `PLANCHA LAMINADO HPL PUERTAS Y FRENTES 0.9MM (ABET LAMINATI) - COLOR: ${matName}${multiplier > 1 ? ` [LOTE ${multiplier} UN]` : ''}`;
-        materialCategory = 'hpl';
-        w = 3050;
-        h = 1300;
-        thick = 0.9;
-      } else {
-        groupKey = `MEL_DOORS_${p.material}`;
-        label = `PLANCHA MELAMINA PUERTAS Y FRENTES ${thicknessMm}MM - COLOR: ${matName}${multiplier > 1 ? ` [LOTE ${multiplier} UN]` : ''}`;
-        materialCategory = 'doors';
-      }
+    } else if (isHPL) {
+      groupKey = `HPL_SHEETS_${p.material || 'abet'}`;
+      label = `PLANCHA LAMINADO HPL 0.9MM (ABET LAMINATI 2 CARAS) - COLOR: ${matName}${multiplier > 1 ? ` [LOTE ${multiplier} UN]` : ''}`;
+      materialCategory = 'hpl';
+      w = 3050;
+      h = 1300;
+      thick = 0.9;
     } else {
-      groupKey = `MEL_STRUCT_${p.material}`;
-      label = `PLANCHA MELAMINA ESTRUCTURA Y CAJONES ${thicknessMm}MM - COLOR: ${matName}${multiplier > 1 ? ` [LOTE ${multiplier} UN]` : ''}`;
-      materialCategory = 'structure';
+      thick = p.thickness || thicknessMm;
+      groupKey = `MEL_${thick}_${p.material}`;
+      materialCategory = isFront ? 'doors' : 'structure';
     }
 
     if (!boardGroups[groupKey]) {
@@ -2985,26 +3049,34 @@ export function calculateKitchenBoardNesting(
         key: groupKey,
         label,
         materialCategory,
-        materialName: isHPL ? `${matName} (Laminado HPL)` : matName,
+        materialName: isHPL ? `${matName} (Laminado HPL 2 Caras)` : matName,
         color: p.material || '#FFFFFF',
         thicknessMm: thick,
         w,
         h,
-        parts: []
+        parts: [],
+        hasDoors: isFront,
+        hasStruct: !isFront && !isBack && !isHPL
       };
+    } else {
+      if (isFront) boardGroups[groupKey].hasDoors = true;
+      if (!isFront && !isBack && !isHPL) boardGroups[groupKey].hasStruct = true;
     }
 
     const isWoodGrain = p.material?.includes('roble') || p.material?.includes('nogal') || p.material?.includes('madera') || p.material?.includes('hickory') || p.material?.includes('wood');
     const allowRotation = isBack ? true : !isWoodGrain;
 
     if (isHPL) {
+      const cab = cabinets.find(c => c.id === p.moduleId);
+      const isBalancer = cab?.hplBalancer !== undefined ? cab.hplBalancer : (useStore.getState ? useStore.getState().hplBalancer : false);
+      const hplQty = isBalancer ? partQty : partQty * 2;
       boardGroups[groupKey].parts.push({
         id: `p-hpl-${pIdx}-${p.name}`,
-        name: `${p.name} (HPL +1cm refilado)`,
+        name: isBalancer ? `${p.name} (HPL 1 Cara +1cm refilado)` : `${p.name} (HPL 2 Caras +1cm refilado)`,
         width: Math.round(p.width) + 10,
         length: Math.round(p.length) + 10,
         color: p.material || '#FFFFFF',
-        qty: partQty,
+        qty: hplQty,
         edgeL1: false,
         edgeL2: false,
         edgeW1: false,
@@ -3012,15 +3084,16 @@ export function calculateKitchenBoardNesting(
         allowRotation: false
       });
 
-      const subKey = 'MDF_CRUDO_SUSTRATO_18MM';
+      const subThick = cab?.hplSubstrateThickness || (useStore.getState ? useStore.getState().hplSubstrateThickness : 18) || 18;
+      const subKey = `MDF_CRUDO_SUSTRATO_${subThick}MM`;
       if (!boardGroups[subKey]) {
         boardGroups[subKey] = {
           key: subKey,
-          label: `PLANCHA MDF CRUDO 18MM (SUSTRATO BASE PUERTAS Y FRENTES HPL)${multiplier > 1 ? ` [LOTE ${multiplier} UN]` : ''}`,
+          label: `PLANCHA MDF CRUDO ${subThick}MM (SUSTRATO ESTRUCTURA, PUERTAS Y CAJONES HPL)${multiplier > 1 ? ` [LOTE ${multiplier} UN]` : ''}`,
           materialCategory: 'doors',
-          materialName: 'MDF Crudo 18mm (Sustrato Base)',
+          materialName: `MDF Crudo ${subThick}mm (Sustrato Base)`,
           color: '#E2D9C8',
-          thicknessMm: 18,
+          thicknessMm: subThick,
           w: 2440,
           h: 1830,
           parts: []
@@ -3028,7 +3101,7 @@ export function calculateKitchenBoardNesting(
       }
       boardGroups[subKey].parts.push({
         id: `p-mdf-${pIdx}-${p.name}`,
-        name: `${p.name} (Sustrato MDF 18mm)`,
+        name: `${p.name} (Sustrato MDF ${subThick}mm)`,
         width: Math.round(p.width),
         length: Math.round(p.length),
         color: '#E2D9C8',
@@ -3053,6 +3126,22 @@ export function calculateKitchenBoardNesting(
         edgeW2: isBack ? false : !!p.edgeW2,
         allowRotation
       });
+    }
+  });
+
+  // Ajustar etiquetas dinámicas según composición real de piezas
+  Object.values(boardGroups).forEach(group => {
+    if (group.key.startsWith('MEL_')) {
+      if (group.hasDoors && group.hasStruct) {
+        group.label = `PLANCHA MELAMINA ${group.thicknessMm}MM (PUERTAS Y ESTRUCTURA) - COLOR: ${group.materialName}${multiplier > 1 ? ` [LOTE ${multiplier} UN]` : ''}`;
+        group.materialCategory = 'structure';
+      } else if (group.hasDoors) {
+        group.label = `PLANCHA MELAMINA PUERTAS Y FRENTES ${group.thicknessMm}MM - COLOR: ${group.materialName}${multiplier > 1 ? ` [LOTE ${multiplier} UN]` : ''}`;
+        group.materialCategory = 'doors';
+      } else {
+        group.label = `PLANCHA MELAMINA ESTRUCTURA Y CAJONES ${group.thicknessMm}MM - COLOR: ${group.materialName}${multiplier > 1 ? ` [LOTE ${multiplier} UN]` : ''}`;
+        group.materialCategory = 'structure';
+      }
     }
   });
 

@@ -5,6 +5,7 @@ import { TexturesSection } from '../components/TexturesSection';
 import { KitchenBlueprint } from '../components/KitchenBlueprint';
 import { exportKitchenToExcel } from '../utils/kitchenExcelGenerator';
 import { exportKitchenLabelsPDF } from '../utils/kitchenLabelsPdfGenerator';
+import { isHplFinish } from '../utils/kitchenManufacturing';
 import { FileSpreadsheet, FileText, RotateCcw, QrCode, Loader2 } from 'lucide-react';
 import { KitchenScene } from '../components/kitchen/KitchenScene';
 import { RoomPlannerModal } from '../components/kitchen/RoomPlannerModal';
@@ -830,7 +831,7 @@ export function KitchenConfigurator({ onNavigate }: { onNavigate: () => void }) 
 
     const currentTargetPart = useStore.getState().targetPart;
     const urlLower = url.toLowerCase();
-    const effectiveMat: 'melamina' | 'hpl' = (mat === 'hpl' || urlLower.includes('abet') || urlLower.includes('laminati') || urlLower.includes('fiore') || urlLower.includes('broccato')) ? 'hpl' : 'melamina';
+    const effectiveMat: 'melamina' | 'hpl' = (mat === 'hpl' || isHplFinish(url, mat as any) || urlLower.includes('abet') || urlLower.includes('laminati') || urlLower.includes('fiore') || urlLower.includes('broccato')) ? 'hpl' : 'melamina';
 
     if (currentTargetPart === 'islandBack') {
       setIslandBackConfig({
@@ -1164,6 +1165,13 @@ export function KitchenConfigurator({ onNavigate }: { onNavigate: () => void }) 
                               onClick={() => handleInsertModule('place_hospital_meson_3drawers')} 
                               icon={<Box size={14} className="text-emerald-400"/>} 
                               label="Mesón 3 Cajones (ANVER 45cm)" 
+                            />
+                            <ToolButton 
+                              isLight={isLight} 
+                              active={toolMode === 'place_hospital_meson_2doors'} 
+                              onClick={() => handleInsertModule('place_hospital_meson_2doors')} 
+                              icon={<Box size={14} className="text-emerald-400"/>} 
+                              label="Mesón 2 Puertas (KUTZ 90cm)" 
                             />
                             <ToolButton 
                               isLight={isLight} 

@@ -329,6 +329,7 @@ export function KitchenModuleContextMenu({
       grainDirection: undefined,
       grainElements: undefined,
       hplBalancer: undefined,
+      hplSubstrateThickness: undefined,
       handleConfig: undefined,
       assemblyType: undefined,
       drawerAssemblyType: undefined,
@@ -488,8 +489,8 @@ export function KitchenModuleContextMenu({
   const is4Drawers = variant === '4_drawers';
   const is2PotDrawers = variant === '2_pot_drawers';
   const is1Door1Drawer = variant === '1_door_1_drawer';
-  const is2Doors = variant === '2_doors' || variant === 'tall_2_doors' || variant === 'wall_2_doors';
-  const is1Door = variant === '1_door' || variant === 'wall_1_door' || variant === 'tall_1_door';
+  const is2Doors = variant === '2_doors' || variant === 'tall_2_doors' || variant === 'wall_2_doors' || variant === 'hospital_meson_2doors';
+  const is1Door = variant === '1_door' || variant === 'wall_1_door' || variant === 'tall_1_door' || variant === 'hospital_meson_1door';
   const isSplit2Doors = variant === 'tall_split_2_doors';
   const isLiftUp = variant === 'wall_lift_up';
   const isLiftUpDouble = variant === 'wall_lift_up_double';
@@ -608,6 +609,10 @@ export function KitchenModuleContextMenu({
   };
 
   const getModuleTitle = () => {
+    if (activeCabinet.variant === 'hospital_meson_3drawers') return 'Mesón 3 Cajones (ANVER)';
+    if (activeCabinet.variant === 'hospital_meson_2doors') return 'Mesón 2 Puertas (KUTZ)';
+    if (activeCabinet.variant === 'hospital_meson_1door') return 'Mesón 1 Puerta (KUTZ)';
+    if (activeCabinet.variant === 'hospital_niche_open') return 'Nicho Abierto Insumos';
     if (activeCabinet.variant?.startsWith('corner_blind')) return 'Esquinero Ciego';
     if (activeCabinet.variant === 'tall_1_door') return 'Despensa 1 Puerta Larga';
     if (activeCabinet.variant === 'tall_split_2_doors') return 'Despensa 2 Puertas (Línea Base)';
@@ -774,6 +779,37 @@ export function KitchenModuleContextMenu({
                         : isLight
                           ? 'bg-white text-slate-700 border border-slate-200 hover:border-orange-500'
                           : 'bg-white/5 text-slate-300 border border-white/10 hover:border-orange-500/50'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeCabinet.variant?.startsWith('hospital_') && (
+            <div className={`flex flex-col gap-2 p-2.5 rounded-xl border ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-black/30 border-white/5'}`}>
+              <label className={`text-[10px] uppercase tracking-wider font-bold ${isLight ? "text-slate-700" : "text-slate-300"}`}>
+                Variante Clínica / Hospitalaria
+              </label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {[
+                  { id: 'hospital_meson_2doors', label: '2 Puertas (KUTZ)' },
+                  { id: 'hospital_meson_1door', label: '1 Puerta (KUTZ)' },
+                  { id: 'hospital_meson_3drawers', label: '3 Cajones (ANVER)' },
+                  { id: 'hospital_niche_open', label: 'Nicho Insumos' },
+                ].map(t => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => updateCabinet(activeCabinet.id, { variant: t.id, name: t.label })}
+                    className={`py-1.5 px-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                      activeCabinet.variant === t.id
+                        ? 'bg-emerald-500 text-black shadow-xs font-extrabold'
+                        : isLight
+                          ? 'bg-white text-slate-700 border border-slate-200 hover:border-emerald-500'
+                          : 'bg-white/5 text-slate-300 border border-white/10 hover:border-emerald-500/50'
                     }`}
                   >
                     {t.label}
@@ -1070,11 +1106,11 @@ export function KitchenModuleContextMenu({
           </AccordionSection>
         )}
 
-        {/* ACORDEÓN 4: REPISAS INTERIORES (MÓDULOS CON PUERTA) */}
-        {isCabinetWithDoors(activeCabinet) && (
+        {/* ACORDEÓN 4: REPISAS INTERIORES (MÓDULOS CON PUERTA O NICHO DE INSUMOS) */}
+        {(isCabinetWithDoors(activeCabinet) || activeCabinet.variant === 'hospital_niche_open') && (
           <AccordionSection
             id="shelves"
-            title="Repisas Interiores"
+            title={activeCabinet.variant === 'hospital_niche_open' ? "Repisas de Insumos" : "Repisas Interiores"}
             icon={Layers}
             badge={
               <span className="font-mono text-orange-500 font-bold text-[10px]">
@@ -1277,6 +1313,9 @@ export function KitchenModuleContextMenu({
 
           const defaultShelves = getDefaultShelvesCount(activeCabinet);
           const currentShelvesCount = activeCabinet.shelvesCount !== undefined ? activeCabinet.shelvesCount : defaultShelves;
+          const isHospitalNiche = activeCabinet.variant === 'hospital_niche_open';
+          const maxShelves = isHospitalNiche ? 4 : 8;
+
           return (
             <div className={`flex flex-col gap-2 p-2.5 rounded-xl border ${
               isLight ? 'bg-white border-slate-200 shadow-sm' : 'bg-[#1c1c1f] border-white/5'
@@ -1286,13 +1325,15 @@ export function KitchenModuleContextMenu({
                   isLight ? 'text-slate-600' : 'text-zinc-400'
                 }`}>
                   <Layers size={13} className={isLight ? "text-orange-600" : "text-orange-400"} />
-                  <span>Repisas Interiores</span>
+                  <span>{isHospitalNiche ? 'Repisas de Insumos' : 'Repisas Interiores'}</span>
                 </div>
-                <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${
-                  isLight ? 'bg-orange-100 text-orange-700' : 'bg-orange-500/10 text-orange-400'
-                }`}>
-                  Anti-Colisión
-                </span>
+                {!isHospitalNiche && (
+                  <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${
+                    isLight ? 'bg-orange-100 text-orange-700' : 'bg-orange-500/10 text-orange-400'
+                  }`}>
+                    Anti-Colisión
+                  </span>
+                )}
               </div>
 
               <div className={`flex items-center justify-between px-3 py-2 rounded-lg border ${
@@ -1336,14 +1377,14 @@ export function KitchenModuleContextMenu({
 
                   <button
                     type="button"
-                    disabled={currentShelvesCount >= 8}
+                    disabled={currentShelvesCount >= maxShelves}
                     onClick={(e) => {
                       e.stopPropagation();
-                      const next = Math.min(8, currentShelvesCount + 1);
+                      const next = Math.min(maxShelves, currentShelvesCount + 1);
                       updateCabinet(activeCabinet.id, { shelvesCount: next });
                     }}
                     className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-sm transition-colors cursor-pointer ${
-                      currentShelvesCount >= 8
+                      currentShelvesCount >= maxShelves
                         ? isLight ? 'bg-slate-100 text-slate-300' : 'bg-white/5 text-zinc-600'
                         : isLight
                           ? 'bg-orange-500 hover:bg-orange-600 text-white'
@@ -2397,48 +2438,113 @@ export function KitchenModuleContextMenu({
             {/* Abet */}
             {abetTextures.length > 0 && (
               <div className="flex flex-col gap-2">
-                <div className={`text-[10px] uppercase tracking-wider font-semibold ${
-                  isLight ? 'text-slate-600' : 'text-zinc-400'
-                }`}>
-                  3. Abet Laminati (HPL)
-                </div>
-
-                {/* Sub-opción contextual en Abet Laminati: Trascara Balancer Blanco 0,9 mm */}
-                <div className={`p-2.5 rounded-xl border flex flex-col gap-1.5 ${
-                  isLight ? 'bg-orange-50/70 border-orange-200' : 'bg-orange-500/10 border-orange-500/20'
-                }`}>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex flex-col min-w-0">
-                      <span className={`text-[11px] font-bold ${isLight ? 'text-slate-800' : 'text-zinc-200'}`}>
-                        Trascara Balancer Blanco (0,9 mm)
-                      </span>
-                      <span className={`text-[9px] ${isLight ? 'text-slate-500' : 'text-zinc-400'}`}>
-                        Equilibrio mecánico anti-alabeo para enchapes HPL
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const current = activeCabinet.hplBalancer ?? globalStore.hplBalancer;
-                        handleOverride('hplBalancer', !current);
-                      }}
-                      className={`text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md transition-all cursor-pointer shrink-0 ${
-                        (activeCabinet.hplBalancer ?? globalStore.hplBalancer)
-                          ? isLight
-                            ? 'bg-orange-500 text-black font-extrabold shadow-xs'
-                            : 'bg-orange-500 text-black font-extrabold shadow-[0_0_8px_rgba(249,115,22,0.4)]'
-                          : isLight
-                            ? 'bg-slate-200 text-slate-600 hover:bg-slate-300'
-                            : 'bg-white/10 text-zinc-400 hover:bg-white/20 hover:text-white'
-                      }`}
-                    >
-                      {(activeCabinet.hplBalancer ?? globalStore.hplBalancer) ? 'Activado (0,9 mm)' : 'Mismo Diseño'}
-                    </button>
+                <div className="flex items-center justify-between">
+                  <div className={`text-[10px] uppercase tracking-wider font-semibold ${
+                    isLight ? 'text-slate-600' : 'text-zinc-400'
+                  }`}>
+                    3. Abet Laminati (HPL)
                   </div>
+                  <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-600 dark:text-orange-400 border border-orange-500/30">
+                    Laminado de Alta Presión
+                  </span>
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">
                   {abetTextures.map(t => renderTextureButton(t))}
+                </div>
+
+                {/* Trascara HPL Balancer Módulo 0.9 mm */}
+                <div className={`mt-1 p-2.5 rounded-xl border flex flex-col gap-1.5 ${
+                  isLight ? 'bg-orange-50/80 border-orange-200' : 'bg-black/30 border-orange-500/25'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <span className={`text-[10px] uppercase font-bold tracking-wider ${
+                      isLight ? 'text-orange-950' : 'text-orange-400'
+                    }`}>
+                      Trascara HPL de Compensación (Módulo)
+                    </span>
+                    <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-600 dark:text-orange-400 border border-orange-500/30">
+                      0.9 mm
+                    </span>
+                  </div>
+                  <p className={`text-[10px] leading-tight ${isLight ? 'text-slate-600' : 'text-zinc-400'}`}>
+                    Balanceador blanco normalizado para evitar el alabeo de puertas y frentes laminados a una cara.
+                  </p>
+                  <div className="grid grid-cols-2 gap-1.5 mt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => handleOverride('hplBalancer', true)}
+                      className={`py-1.5 px-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                        (activeCabinet.hplBalancer ?? globalStore.hplBalancer)
+                          ? 'bg-orange-500 text-black shadow-xs font-extrabold'
+                          : isLight
+                            ? 'bg-white text-slate-700 border border-slate-300 hover:border-orange-400'
+                            : 'bg-white/5 text-zinc-300 border border-white/10 hover:border-orange-500/50'
+                      }`}
+                    >
+                      <span>Balancer Blanco 0.9mm</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOverride('hplBalancer', false)}
+                      className={`py-1.5 px-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                        !(activeCabinet.hplBalancer ?? globalStore.hplBalancer)
+                          ? 'bg-orange-500 text-black shadow-xs font-extrabold'
+                          : isLight
+                            ? 'bg-white text-slate-700 border border-slate-300 hover:border-orange-400'
+                            : 'bg-white/5 text-zinc-300 border border-white/10 hover:border-orange-500/50'
+                      }`}
+                    >
+                      <span>Mismo HPL 2 Caras</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sustrato de Base HPL: MDF Desnudo 15mm / 18mm (Formato 2440 × 1520 mm) */}
+                <div className={`mt-1 p-2.5 rounded-xl border flex flex-col gap-1.5 ${
+                  isLight ? 'bg-orange-50/80 border-orange-200' : 'bg-black/30 border-orange-500/25'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <span className={`text-[10px] uppercase font-bold tracking-wider ${
+                      isLight ? 'text-orange-950' : 'text-orange-400'
+                    }`}>
+                      Sustrato Base MDF Desnudo (Módulo)
+                    </span>
+                    <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-zinc-700/50 text-zinc-300 border border-zinc-600/40">
+                      2440 × 1520 mm
+                    </span>
+                  </div>
+                  <p className={`text-[10px] leading-tight ${isLight ? 'text-slate-600' : 'text-zinc-400'}`}>
+                    Tablero MDF crudo donde se prensa el laminado HPL (formato único 2440 × 1520 mm).
+                  </p>
+                  <div className="grid grid-cols-2 gap-1.5 mt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => handleOverride('hplSubstrateThickness', 15)}
+                      className={`py-1.5 px-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                        (activeCabinet.hplSubstrateThickness ?? globalStore.hplSubstrateThickness ?? 15) === 15
+                          ? 'bg-orange-500 text-black shadow-xs font-extrabold'
+                          : isLight
+                            ? 'bg-white text-slate-700 border border-slate-300 hover:border-orange-400'
+                            : 'bg-white/5 text-zinc-300 border border-white/10 hover:border-orange-500/50'
+                      }`}
+                    >
+                      <span>MDF Desnudo 15 mm</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOverride('hplSubstrateThickness', 18)}
+                      className={`py-1.5 px-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                        (activeCabinet.hplSubstrateThickness ?? globalStore.hplSubstrateThickness) === 18
+                          ? 'bg-orange-500 text-black shadow-xs font-extrabold'
+                          : isLight
+                            ? 'bg-white text-slate-700 border border-slate-300 hover:border-orange-400'
+                            : 'bg-white/5 text-zinc-300 border border-white/10 hover:border-orange-500/50'
+                      }`}
+                    >
+                      <span>MDF Desnudo 18 mm</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

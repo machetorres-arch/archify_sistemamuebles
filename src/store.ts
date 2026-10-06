@@ -70,6 +70,8 @@ export interface ClosetState {
   showBottomWall: boolean;
   hplBalancer: boolean;
   setHplBalancer: (val: boolean) => void;
+  hplSubstrateThickness: 15 | 18;
+  setHplSubstrateThickness: (t: 15 | 18) => void;
   showLeftWall: boolean;
   showRightWall: boolean;
   showBackWall: boolean;
@@ -289,6 +291,7 @@ export const useStore = create<ClosetState>((set, get) => {
   showTopWall: true,
   showBottomWall: true,
   hplBalancer: true,
+  hplSubstrateThickness: 15,
   showLeftWall: true,
   showRightWall: true,
   showBackWall: true,
@@ -473,6 +476,7 @@ export const useStore = create<ClosetState>((set, get) => {
   toggleTopWall: () => set((state) => ({ showTopWall: !state.showTopWall })),
   toggleBottomWall: () => set((state) => ({ showBottomWall: !state.showBottomWall })),
   setHplBalancer: (val) => set({ hplBalancer: val }),
+  setHplSubstrateThickness: (t) => set({ hplSubstrateThickness: t }),
   toggleLeftWall: () => set((state) => ({ showLeftWall: !state.showLeftWall })),
   toggleRightWall: () => set((state) => ({ showRightWall: !state.showRightWall })),
   toggleBackWall: () => set((state) => ({ showBackWall: !state.showBackWall })),
@@ -547,6 +551,7 @@ export const useStore = create<ClosetState>((set, get) => {
       showTopWall: state.showTopWall,
       showBottomWall: state.showBottomWall,
       hplBalancer: state.hplBalancer,
+      hplSubstrateThickness: state.hplSubstrateThickness,
       showLeftWall: state.showLeftWall,
       showRightWall: state.showRightWall,
       showBackWall: state.showBackWall,
